@@ -26,3 +26,11 @@ Ante conflicto entre una propuesta y una regla, gana la regla.
 - Toda ruta pasa por `AutenticacionGuard` (global). El usuario llega al controller con `@Usuario()`.
 - `src/domain/` no importa Nest ni Supabase.
 - El modelo de datos lo decide el autor en el spec; el agente escribe y aplica la migración, y el autor la revisa antes de aplicarla (REGLAS §8).
+
+## Specs
+
+- Numeración propia desde 03 (01 y 02 son históricos, compartidos con Tino-web).
+- Flujo de una feature con interfaz: diseño en `../Tino-web/referencias/<feature>/` → `/necesidades <ruta>` → `specs/necesidades/<feature>.md` → `/spec` + `/spec-impl` aquí → spec de la web.
+- Un spec con interfaz lee antes `specs/necesidades/<feature>.md`. El modelo y el contrato (endpoints, DTOs, errores) se definen aquí, los decide el autor.
+- El spec incluye una **tabla de cobertura**: cada `N-xx` del inventario → endpoint y campo que la cubre, o "fuera de alcance" con motivo. En los dos sentidos: ninguna `N-xx` sin cubrir, ningún endpoint sin una `N-xx` que lo pida (salvo los que exija una regla, citándola).
+- La tabla completa es criterio de aceptación: el spec no pasa a Aprobado con filas vacías.
