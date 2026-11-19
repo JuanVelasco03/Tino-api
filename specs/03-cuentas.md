@@ -1,6 +1,6 @@
 # SPEC 03 — Cuentas: lista con saldos, alta, edición, orden y archivo
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 02
 > **Fecha:** 2026-11-18
 > **Objetivo:** Que la API dé las cuentas del usuario (efectivo, banco y tarjeta sin ciclo) agrupadas en activos y pasivos con saldos, totales y patrimonio neto calculados, y permita crearlas, editarlas, reordenarlas, archivarlas, restaurarlas y eliminarlas.
