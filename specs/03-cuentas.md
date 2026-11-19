@@ -239,6 +239,10 @@ src/
 test/
   aislamiento.e2e-spec.ts          # ampliado (no se borra ni se desactiva)
   cuentas.e2e-spec.ts
+docs/api/
+  README.md                        # convenciones comunes: auth, montos, ErrorApi (añadido al implementar)
+  perfil.md                        # contrato vigente de /perfil (añadido al implementar)
+  cuentas.md                       # contrato vigente de /cuentas, para el spec de la web (añadido al implementar)
 package.json                       # + zod
 ```
 

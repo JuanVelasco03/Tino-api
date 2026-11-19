@@ -34,3 +34,4 @@ Ante conflicto entre una propuesta y una regla, gana la regla.
 - Un spec con interfaz lee antes `specs/necesidades/<feature>.md`. El modelo y el contrato (endpoints, DTOs, errores) se definen aquí, los decide el autor.
 - El spec incluye una **tabla de cobertura**: cada `N-xx` del inventario → endpoint y campo que la cubre, o "fuera de alcance" con motivo. En los dos sentidos: ninguna `N-xx` sin cubrir, ningún endpoint sin una `N-xx` que lo pida (salvo los que exija una regla, citándola).
 - La tabla completa es criterio de aceptación: el spec no pasa a Aprobado con filas vacías.
+- Todo spec que agrega o cambia un endpoint actualiza `docs/api/` en la misma rama. Es la referencia vigente del contrato para los clientes; el spec de la web la lee de ahí.

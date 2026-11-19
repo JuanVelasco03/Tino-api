@@ -19,9 +19,8 @@ RLS evalúan al usuario real.
 
 ## Endpoints
 
-| Método | Ruta | Respuesta |
-|---|---|---|
-| GET | `/perfil` | Perfil del usuario autenticado. 401 sin token válido; 404 si no tiene perfil. |
+Contrato vigente para clientes en [`docs/api/`](docs/api/README.md):
+[perfil](docs/api/perfil.md) y [cuentas](docs/api/cuentas.md).
 
 ## Pruebas
 
