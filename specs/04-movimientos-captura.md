@@ -1,6 +1,6 @@
 # SPEC 04 — Movimientos y captura rápida
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 02, SPEC 03
 > **Fecha:** 2026-11-19
 > **Objetivo:** Que la API registre, liste por mes, edite y elimine movimientos con saldos calculados e historial, y dé a la captura rápida categorías, reglas, sugerencias, conceptos frecuentes, gasto de hoy y cuenta predeterminada.
@@ -125,7 +125,7 @@ Decidido por el autor. Migración `supabase/migrations/<timestamp>_movimientos.s
 |---|---|---|
 | `id` | `uuid` | PK, default `gen_random_uuid()` |
 | `movimiento_id` | `uuid` | not null, FK `movimientos(id) on delete cascade` |
-| `usuario_id` | `uuid` | not null |
+| `usuario_id` | `uuid` | not null, FK `auth.users(id) on delete cascade` |
 | `categoria_id` | `uuid` | not null |
 | `monto` | `numeric(19,0)` | not null, `check (monto > 0)` |
 
@@ -151,7 +151,7 @@ Decidido por el autor. Migración `supabase/migrations/<timestamp>_movimientos.s
 
 ### Funciones de escritura
 
-Todas `security definer`, `set search_path = ''`, `revoke all ... from public, anon` y `grant execute ... to authenticated`. Fuerzan `usuario_id = auth.uid()` y lanzan `NO_AUTENTICADO` si es nulo. Las FK compuestas garantizan que cuentas y categorías sean del usuario.
+Todas `security definer`, `set search_path = ''`, `revoke all ... from public, anon` y `grant execute ... to authenticated`. Viven en el esquema `privado` (no expuesto por PostgREST); en `public` hay envolturas `security invoker` con el mismo nombre y firma, que es lo que llama la API por `rpc`. Fuerzan `usuario_id = auth.uid()` y lanzan `NO_AUTENTICADO` si es nulo. Las FK compuestas garantizan que cuentas y categorías sean del usuario.
 
 Los errores se lanzan como `raise exception '<CODIGO>'` o `'<CODIGO>:<campo>'`. El repositorio los separa.
 
@@ -174,7 +174,7 @@ El cuidado con las archivadas mantiene el invariante de SPEC 03: una archivada t
 
 Todas `security invoker`, `set search_path = ''`, `grant execute to authenticated`.
 
-- `gastos_del_dia(p_fecha date) returns numeric`: suma de `monto` de los `gasto` con esa fecha. Sin transferencias ni ingresos (RN-05).
+- `gastos_del_dia(p_fecha date) returns table (total numeric)`: suma de `monto` de los `gasto` con esa fecha. Sin transferencias ni ingresos (RN-05). Una fila para leer `total::text`: un `numeric` escalar llegaría como número JSON.
 - `conceptos_frecuentes(p_desde date, p_limite integer) returns table (tipo text, descripcion text, usos bigint)`: por tipo, las `p_limite` descripciones más usadas desde `p_desde`. Agrupa por `lower(btrim(descripcion))`, muestra la grafía más reciente y desempata por uso más reciente.
 - `conceptos_por_prefijo(p_tipo text, p_prefijo text, p_limite integer) returns table (descripcion text, usos bigint)`: descripciones del tipo cuyo `extensions.unaccent(lower(…))` empieza por el prefijo normalizado. Escapa `%` y `_`. Todo el historial, por frecuencia.
 
@@ -495,46 +495,46 @@ Cada endpoint responde a al menos una N-xx: `GET /movimientos` (N-04), `POST` (N
 
 ## Criterios de aceptación
 
-- [ ] `npm test`, `npm run lint` y `npm run typecheck` pasan.
-- [ ] `list_migrations` muestra la migración y el archivo existe en `supabase/migrations/`.
-- [ ] `get_advisors` (security) no reporta avisos sobre las tablas, vistas ni funciones nuevas.
-- [ ] `test/aislamiento.e2e-spec.ts` pasa con las comprobaciones del paso 3 y no deja usuarios de prueba.
-- [ ] Un usuario nuevo tiene 9 categorías de gasto y 4 de ingreso en `GET /captura`, en el orden de la semilla.
-- [ ] Con «Nequi» (banco, `"20321"`) y «Tarjeta» (`tarjeta_credito`, `"1284300"`, cupo `"4000000"`):
+- [x] `npm test`, `npm run lint` y `npm run typecheck` pasan.
+- [x] `list_migrations` muestra la migración y el archivo existe en `supabase/migrations/`.
+- [x] `get_advisors` (security) no reporta avisos sobre las tablas, vistas ni funciones nuevas.
+- [x] `test/aislamiento.e2e-spec.ts` pasa con las comprobaciones del paso 3 y no deja usuarios de prueba.
+- [x] Un usuario nuevo tiene 9 categorías de gasto y 4 de ingreso en `GET /captura`, en el orden de la semilla.
+- [x] Con «Nequi» (banco, `"20321"`) y «Tarjeta» (`tarjeta_credito`, `"1284300"`, cupo `"4000000"`):
   - un gasto de `"15000"` desde Nequi deja su saldo en `"5321"`;
   - un gasto de `"15000"` con la tarjeta deja su saldo en `"1299300"`;
   - una transferencia de `"5000"` de Nequi a la tarjeta deja Nequi en `"321"` y la tarjeta en `"1294300"`;
   - un ingreso de `"100000"` a Nequi lo deja en `"100321"`.
-- [ ] `POST /movimientos` sin `fecha` guarda la fecha de hoy en la zona del perfil.
-- [ ] Un gasto sin `categoriaId` ni `partes` responde `201` con `categoria: null` y `partes: []`.
-- [ ] Gasto sin origen → `400 ORIGEN_REQUERIDO`; transferencia con origen = destino → `400 CUENTAS_IGUALES`; transferencia con categoría → `400 CATEGORIA_NO_PERMITIDA`.
-- [ ] `monto: "0"` → `400 MONTO_REQUERIDO`; `monto: "1.5"` → `400 MONTO_INVALIDO`.
-- [ ] Un gasto con una categoría de ingreso → `422 CATEGORIA_INVALIDA`.
-- [ ] Un gasto en una cuenta archivada → `409 CUENTA_ARCHIVADA` con `campo: "cuentaOrigenId"`.
-- [ ] Un gasto de `"30000"` dividido en Comida `"20000"` y Mercado `"10000"` responde `201` con dos partes. Con `"20000"` y `"5000"` → `422 PARTES_NO_SUMAN`. Con una sola parte → `400 PARTES_INSUFICIENTES`.
-- [ ] `GET /movimientos?mes=2026-11` devuelve solo movimientos de noviembre, el más reciente primero; a igual fecha, el último registrado primero.
-- [ ] `GET /movimientos` sin `mes` devuelve el mes actual. `?mes=2026-13` → `400 MES_INVALIDO`.
-- [ ] Cada movimiento de la lista trae los nombres de cuenta y categoría, también si la cuenta fue archivada después.
-- [ ] `PUT` que convierte un gasto con categoría en transferencia sin categoría responde `200`, ajusta los dos saldos y deja en `movimientos_cambios` una fila `edicion` con `antes` y `despues`.
-- [ ] `PUT` idéntico al estado actual no deja fila en `movimientos_cambios`.
-- [ ] `DELETE /movimientos/:id` responde `204`, el saldo vuelve al anterior y queda una fila `eliminacion` con `antes` (partes incluidas).
-- [ ] `PUT` o `DELETE` de un movimiento cuya cuenta está archivada → `409 CUENTA_ARCHIVADA`.
-- [ ] INSERT, UPDATE y DELETE directos en `movimientos` con el token del usuario no cambian nada.
-- [ ] `DELETE /cuentas/:id` de una cuenta con movimientos → `409 CUENTA_CON_MOVIMIENTOS`.
-- [ ] Un UPDATE en SQL de `perfiles.moneda_base` con movimientos falla con `MONEDA_BASE_BLOQUEADA`; sin movimientos, pasa.
-- [ ] `GET /captura`: `gastosHoy` suma solo los gastos de hoy (sin ingresos, transferencias ni gastos de ayer).
-- [ ] `GET /captura`: `conceptosFrecuentes.gasto` trae como máximo 6 descripciones, la más usada en 90 días primero; un usuario sin movimientos recibe listas vacías.
-- [ ] `GET /captura`: sin elegir, `cuentaPredeterminadaId` es la primera activa del orden. Tras `PATCH /perfil` con Efectivo, es Efectivo. Archivada Efectivo, vuelve a la primera activa.
-- [ ] `PATCH /perfil` con una cuenta ajena → `422 CUENTA_INVALIDA`; con una archivada → `409 CUENTA_ARCHIVADA`.
-- [ ] `GET /sugerencias?tipo=gasto&texto=almu` con «Almuerzo» registrado antes trae el concepto «Almuerzo» con categoría Comida.
-- [ ] `GET /sugerencias?tipo=gasto&texto=Corrientazo` trae `propuesta` Comida con `palabraClave: "corrientazo"`.
-- [ ] `GET /sugerencias?tipo=gasto&texto=barbería` trae `propuesta: null`.
-- [ ] `POST /reglas` con `palabraClave: "Peluquería"` y Hogar guarda `"peluqueria"`; después `texto=peluqueria` propone Hogar. Repetirla → `409 PALABRA_CLAVE_DUPLICADA`.
-- [ ] `PATCH /reglas/:id` cambia la categoría y la siguiente sugerencia lo refleja. Una regla ajena → `404 REGLA_NO_ENCONTRADA`.
-- [ ] Ninguna ruta devuelve texto de Postgres en `mensaje`.
-- [ ] Ningún archivo de `src/domain/` importa `@nestjs/*`, `zod` ni `@supabase/*`.
-- [ ] Ningún monto pasa por `number` en el dominio ni en los repositorios.
-- [ ] `src/domain/saldo/` no existe.
+- [x] `POST /movimientos` sin `fecha` guarda la fecha de hoy en la zona del perfil.
+- [x] Un gasto sin `categoriaId` ni `partes` responde `201` con `categoria: null` y `partes: []`.
+- [x] Gasto sin origen → `400 ORIGEN_REQUERIDO`; transferencia con origen = destino → `400 CUENTAS_IGUALES`; transferencia con categoría → `400 CATEGORIA_NO_PERMITIDA`.
+- [x] `monto: "0"` → `400 MONTO_REQUERIDO`; `monto: "1.5"` → `400 MONTO_INVALIDO`.
+- [x] Un gasto con una categoría de ingreso → `422 CATEGORIA_INVALIDA`.
+- [x] Un gasto en una cuenta archivada → `409 CUENTA_ARCHIVADA` con `campo: "cuentaOrigenId"`.
+- [x] Un gasto de `"30000"` dividido en Comida `"20000"` y Mercado `"10000"` responde `201` con dos partes. Con `"20000"` y `"5000"` → `422 PARTES_NO_SUMAN`. Con una sola parte → `400 PARTES_INSUFICIENTES`.
+- [x] `GET /movimientos?mes=2026-11` devuelve solo movimientos de noviembre, el más reciente primero; a igual fecha, el último registrado primero.
+- [x] `GET /movimientos` sin `mes` devuelve el mes actual. `?mes=2026-13` → `400 MES_INVALIDO`.
+- [x] Cada movimiento de la lista trae los nombres de cuenta y categoría, también si la cuenta fue archivada después.
+- [x] `PUT` que convierte un gasto con categoría en transferencia sin categoría responde `200`, ajusta los dos saldos y deja en `movimientos_cambios` una fila `edicion` con `antes` y `despues`.
+- [x] `PUT` idéntico al estado actual no deja fila en `movimientos_cambios`.
+- [x] `DELETE /movimientos/:id` responde `204`, el saldo vuelve al anterior y queda una fila `eliminacion` con `antes` (partes incluidas).
+- [x] `PUT` o `DELETE` de un movimiento cuya cuenta está archivada → `409 CUENTA_ARCHIVADA`.
+- [x] INSERT, UPDATE y DELETE directos en `movimientos` con el token del usuario no cambian nada.
+- [x] `DELETE /cuentas/:id` de una cuenta con movimientos → `409 CUENTA_CON_MOVIMIENTOS`.
+- [x] Un UPDATE en SQL de `perfiles.moneda_base` con movimientos falla con `MONEDA_BASE_BLOQUEADA`; sin movimientos, pasa.
+- [x] `GET /captura`: `gastosHoy` suma solo los gastos de hoy (sin ingresos, transferencias ni gastos de ayer).
+- [x] `GET /captura`: `conceptosFrecuentes.gasto` trae como máximo 6 descripciones, la más usada en 90 días primero; un usuario sin movimientos recibe listas vacías.
+- [x] `GET /captura`: sin elegir, `cuentaPredeterminadaId` es la primera activa del orden. Tras `PATCH /perfil` con Efectivo, es Efectivo. Archivada Efectivo, vuelve a la primera activa.
+- [x] `PATCH /perfil` con una cuenta ajena → `422 CUENTA_INVALIDA`; con una archivada → `409 CUENTA_ARCHIVADA`.
+- [x] `GET /sugerencias?tipo=gasto&texto=almu` con «Almuerzo» registrado antes trae el concepto «Almuerzo» con categoría Comida.
+- [x] `GET /sugerencias?tipo=gasto&texto=Corrientazo` trae `propuesta` Comida con `palabraClave: "corrientazo"`.
+- [x] `GET /sugerencias?tipo=gasto&texto=barbería` trae `propuesta: null`.
+- [x] `POST /reglas` con `palabraClave: "Peluquería"` y Hogar guarda `"peluqueria"`; después `texto=peluqueria` propone Hogar. Repetirla → `409 PALABRA_CLAVE_DUPLICADA`.
+- [x] `PATCH /reglas/:id` cambia la categoría y la siguiente sugerencia lo refleja. Una regla ajena → `404 REGLA_NO_ENCONTRADA`.
+- [x] Ninguna ruta devuelve texto de Postgres en `mensaje`.
+- [x] Ningún archivo de `src/domain/` importa `@nestjs/*`, `zod` ni `@supabase/*`.
+- [x] Ningún monto pasa por `number` en el dominio ni en los repositorios.
+- [x] `src/domain/saldo/` no existe.
 
 ## Decisiones
 
@@ -560,6 +560,10 @@ Cada endpoint responde a al menos una N-xx: `GET /movimientos` (N-04), `POST` (N
 - **Sí:** monto siempre positivo en el DTO; el signo por tipo lo pone el cliente. Igual que el saldo de un pasivo en SPEC 03.
 - **Sí:** el agente reescribe `validarMovimiento` (categoría opcional, partes) y elimina `calcularSaldo`: el saldo sale de la vista, como decidió SPEC 03.
 - **Sí:** `bloquear_moneda_base` como trigger: `perfiles` admite UPDATE directo del usuario.
+- **Sí (implementación):** las funciones definer de escritura en el esquema `privado`, con envolturas `security invoker` en `public`. Mismo contrato y misma garantía; `get_advisors` deja de marcarlas (lint 0029). **No:** aceptar el aviso.
+- **Sí (implementación):** `partes` nulo, JSON `null` o `[]` equivalen a no dividir; en `movimientos_detalle` el monto de cada parte va como texto en el `jsonb`. `reemplazar_movimiento` con `p_fecha` nulo conserva la fecha (el `PUT` la exige igual).
+- **Sí (implementación):** FK `movimiento_partes.usuario_id → auth.users on delete cascade`. Sin ella, borrar un usuario con movimientos divididos fallaba: la cascada borraba `categorias` antes que las partes (segundo nivel) y saltaba el `restrict` de `movimiento_partes_categoria_fkey`. **No:** volver diferible esa FK.
+- **Sí (implementación):** índices que cubren las FK compuestas empezando por `usuario_id` (`movimientos_origen_idx`, `movimientos_destino_idx`, `movimientos_categoria_idx`, `movimiento_partes_usuario_idx`, `reglas_usuario_idx`, `perfiles_cuenta_predeterminada_idx`).
 - **No:** endpoint para leer `movimientos_cambios`, listar o borrar reglas, ni gestionar categorías. Ninguna N-xx los pide.
 
 ## Riesgos

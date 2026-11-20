@@ -12,8 +12,11 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 
 | Módulo | Documento | Spec de origen |
 |---|---|---|
-| Perfil | [`perfil.md`](perfil.md) | SPEC 02 |
-| Cuentas | [`cuentas.md`](cuentas.md) | SPEC 03 |
+| Perfil | [`perfil.md`](perfil.md) | SPEC 02, SPEC 04 |
+| Cuentas | [`cuentas.md`](cuentas.md) | SPEC 03, SPEC 04 |
+| Movimientos | [`movimientos.md`](movimientos.md) | SPEC 04 |
+| Captura rápida y sugerencias | [`captura.md`](captura.md) | SPEC 04 |
+| Reglas de categorización | [`reglas.md`](reglas.md) | SPEC 04 |
 
 ---
 

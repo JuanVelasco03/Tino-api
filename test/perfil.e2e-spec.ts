@@ -100,6 +100,7 @@ describe("GET /perfil", () => {
           monedaBase: "COP",
           zonaHoraria: "America/Bogota",
           primerUsoCompletado: false,
+          cuentaPredeterminadaId: null, // SPEC 04
         });
       }
     });

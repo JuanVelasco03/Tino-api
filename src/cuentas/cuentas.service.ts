@@ -6,14 +6,13 @@ import type { Naturaleza } from "../domain/cuenta/naturaleza.js";
 import { agruparCuentas } from "../domain/cuenta/resumen.js";
 import { puedeArchivar, validarAlta, validarEdicion } from "../domain/cuenta/validar.js";
 import { fechaLocal } from "../domain/fecha/fecha-local.js";
+import { ZONA_HORARIA_POR_DEFECTO } from "../domain/perfil/perfil.js";
 import {
   CuentasRepository,
   type DatosAlta,
   type DatosEdicion,
 } from "../repositories/supabase/cuentas.repository.js";
 import { PerfilesRepository } from "../repositories/supabase/perfiles.repository.js";
-
-const ZONA_POR_DEFECTO = "America/Bogota";
 
 @Injectable()
 export class CuentasService {
@@ -32,7 +31,7 @@ export class CuentasService {
     ]);
     return {
       resumen: agruparCuentas(cuentas),
-      fechaSaldos: fechaLocal(new Date(), perfil?.zonaHoraria ?? ZONA_POR_DEFECTO),
+      fechaSaldos: fechaLocal(new Date(), perfil?.zonaHoraria ?? ZONA_HORARIA_POR_DEFECTO),
     };
   }
 

@@ -9,6 +9,33 @@ export type Database = {
   };
   public: {
     Tables: {
+      categorias: {
+        Row: {
+          creado_en: string;
+          id: string;
+          nombre: string;
+          posicion: number;
+          tipo: string;
+          usuario_id: string;
+        };
+        Insert: {
+          creado_en?: string;
+          id?: string;
+          nombre: string;
+          posicion: number;
+          tipo: string;
+          usuario_id: string;
+        };
+        Update: {
+          creado_en?: string;
+          id?: string;
+          nombre?: string;
+          posicion?: number;
+          tipo?: string;
+          usuario_id?: string;
+        };
+        Relationships: [];
+      };
       cuentas: {
         Row: {
           actualizado_en: string;
@@ -96,10 +123,174 @@ export type Database = {
           },
         ];
       };
+      movimiento_partes: {
+        Row: {
+          categoria_id: string;
+          id: string;
+          monto: number;
+          movimiento_id: string;
+          usuario_id: string;
+        };
+        Insert: {
+          categoria_id: string;
+          id?: string;
+          monto: number;
+          movimiento_id: string;
+          usuario_id: string;
+        };
+        Update: {
+          categoria_id?: string;
+          id?: string;
+          monto?: number;
+          movimiento_id?: string;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "movimiento_partes_categoria_fkey";
+            columns: ["usuario_id", "categoria_id"];
+            isOneToOne: false;
+            referencedRelation: "categorias";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "movimiento_partes_movimiento_id_fkey";
+            columns: ["movimiento_id"];
+            isOneToOne: false;
+            referencedRelation: "movimientos";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "movimiento_partes_movimiento_id_fkey";
+            columns: ["movimiento_id"];
+            isOneToOne: false;
+            referencedRelation: "movimientos_detalle";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      movimientos: {
+        Row: {
+          actualizado_en: string;
+          categoria_id: string | null;
+          creado_en: string;
+          cuenta_destino_id: string | null;
+          cuenta_origen_id: string | null;
+          descripcion: string | null;
+          fecha: string;
+          id: string;
+          moneda: string;
+          monto: number;
+          nota: string | null;
+          tasa: number;
+          tipo: string;
+          usuario_id: string;
+        };
+        Insert: {
+          actualizado_en?: string;
+          categoria_id?: string | null;
+          creado_en?: string;
+          cuenta_destino_id?: string | null;
+          cuenta_origen_id?: string | null;
+          descripcion?: string | null;
+          fecha: string;
+          id?: string;
+          moneda?: string;
+          monto: number;
+          nota?: string | null;
+          tasa?: number;
+          tipo: string;
+          usuario_id: string;
+        };
+        Update: {
+          actualizado_en?: string;
+          categoria_id?: string | null;
+          creado_en?: string;
+          cuenta_destino_id?: string | null;
+          cuenta_origen_id?: string | null;
+          descripcion?: string | null;
+          fecha?: string;
+          id?: string;
+          moneda?: string;
+          monto?: number;
+          nota?: string | null;
+          tasa?: number;
+          tipo?: string;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "movimientos_categoria_fkey";
+            columns: ["usuario_id", "categoria_id", "tipo"];
+            isOneToOne: false;
+            referencedRelation: "categorias";
+            referencedColumns: ["usuario_id", "id", "tipo"];
+          },
+          {
+            foreignKeyName: "movimientos_cuenta_destino_fkey";
+            columns: ["usuario_id", "cuenta_destino_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "movimientos_cuenta_destino_fkey";
+            columns: ["usuario_id", "cuenta_destino_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas_con_saldo";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "movimientos_cuenta_origen_fkey";
+            columns: ["usuario_id", "cuenta_origen_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "movimientos_cuenta_origen_fkey";
+            columns: ["usuario_id", "cuenta_origen_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas_con_saldo";
+            referencedColumns: ["usuario_id", "id"];
+          },
+        ];
+      };
+      movimientos_cambios: {
+        Row: {
+          antes: Json;
+          cambiado_en: string;
+          despues: Json | null;
+          id: string;
+          movimiento_id: string;
+          operacion: string;
+          usuario_id: string;
+        };
+        Insert: {
+          antes: Json;
+          cambiado_en?: string;
+          despues?: Json | null;
+          id?: string;
+          movimiento_id: string;
+          operacion: string;
+          usuario_id: string;
+        };
+        Update: {
+          antes?: Json;
+          cambiado_en?: string;
+          despues?: Json | null;
+          id?: string;
+          movimiento_id?: string;
+          operacion?: string;
+          usuario_id?: string;
+        };
+        Relationships: [];
+      };
       perfiles: {
         Row: {
           actualizado_en: string;
           creado_en: string;
+          cuenta_predeterminada_id: string | null;
           id: string;
           moneda_base: string;
           nombre: string | null;
@@ -109,6 +300,7 @@ export type Database = {
         Insert: {
           actualizado_en?: string;
           creado_en?: string;
+          cuenta_predeterminada_id?: string | null;
           id: string;
           moneda_base?: string;
           nombre?: string | null;
@@ -118,13 +310,64 @@ export type Database = {
         Update: {
           actualizado_en?: string;
           creado_en?: string;
+          cuenta_predeterminada_id?: string | null;
           id?: string;
           moneda_base?: string;
           nombre?: string | null;
           primer_uso_completado?: boolean;
           zona_horaria?: string;
         };
-        Relationships: [];
+        Relationships: [
+          {
+            foreignKeyName: "perfiles_cuenta_predeterminada_fkey";
+            columns: ["id", "cuenta_predeterminada_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "perfiles_cuenta_predeterminada_fkey";
+            columns: ["id", "cuenta_predeterminada_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas_con_saldo";
+            referencedColumns: ["usuario_id", "id"];
+          },
+        ];
+      };
+      reglas_categoria: {
+        Row: {
+          actualizado_en: string;
+          categoria_id: string;
+          creado_en: string;
+          id: string;
+          palabra_clave: string;
+          usuario_id: string;
+        };
+        Insert: {
+          actualizado_en?: string;
+          categoria_id: string;
+          creado_en?: string;
+          id?: string;
+          palabra_clave: string;
+          usuario_id?: string;
+        };
+        Update: {
+          actualizado_en?: string;
+          categoria_id?: string;
+          creado_en?: string;
+          id?: string;
+          palabra_clave?: string;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "reglas_categoria_categoria_fkey";
+            columns: ["usuario_id", "categoria_id"];
+            isOneToOne: false;
+            referencedRelation: "categorias";
+            referencedColumns: ["usuario_id", "id"];
+          },
+        ];
       };
     };
     Views: {
@@ -152,7 +395,7 @@ export type Database = {
           id?: string | null;
           nombre?: string | null;
           posicion?: number | null;
-          saldo?: number | null;
+          saldo?: never;
           saldo_inicial?: number | null;
           tipo?: string | null;
           usuario_id?: string | null;
@@ -166,18 +409,149 @@ export type Database = {
           id?: string | null;
           nombre?: string | null;
           posicion?: number | null;
-          saldo?: number | null;
+          saldo?: never;
           saldo_inicial?: number | null;
           tipo?: string | null;
           usuario_id?: string | null;
         };
         Relationships: [];
       };
+      movimientos_detalle: {
+        Row: {
+          actualizado_en: string | null;
+          categoria_id: string | null;
+          categoria_nombre: string | null;
+          creado_en: string | null;
+          cuenta_destino_id: string | null;
+          cuenta_destino_nombre: string | null;
+          cuenta_origen_id: string | null;
+          cuenta_origen_nombre: string | null;
+          descripcion: string | null;
+          fecha: string | null;
+          id: string | null;
+          moneda: string | null;
+          monto: number | null;
+          nota: string | null;
+          partes: Json | null;
+          tasa: number | null;
+          tipo: string | null;
+          usuario_id: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "movimientos_categoria_fkey";
+            columns: ["usuario_id", "categoria_id", "tipo"];
+            isOneToOne: false;
+            referencedRelation: "categorias";
+            referencedColumns: ["usuario_id", "id", "tipo"];
+          },
+          {
+            foreignKeyName: "movimientos_cuenta_destino_fkey";
+            columns: ["usuario_id", "cuenta_destino_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "movimientos_cuenta_destino_fkey";
+            columns: ["usuario_id", "cuenta_destino_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas_con_saldo";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "movimientos_cuenta_origen_fkey";
+            columns: ["usuario_id", "cuenta_origen_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "movimientos_cuenta_origen_fkey";
+            columns: ["usuario_id", "cuenta_origen_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas_con_saldo";
+            referencedColumns: ["usuario_id", "id"];
+          },
+        ];
+      };
     };
     Functions: {
+      comprobar_cuentas_actuales: {
+        Args: {
+          p_movimiento: Database["public"]["Tables"]["movimientos"]["Row"];
+        };
+        Returns: undefined;
+      };
+      conceptos_frecuentes: {
+        Args: { p_desde: string; p_limite: number };
+        Returns: {
+          descripcion: string;
+          tipo: string;
+          usos: number;
+        }[];
+      };
+      conceptos_por_prefijo: {
+        Args: { p_limite: number; p_prefijo: string; p_tipo: string };
+        Returns: {
+          descripcion: string;
+          usos: number;
+        }[];
+      };
+      eliminar_movimiento: { Args: { p_id: string }; Returns: undefined };
+      foto_movimiento: { Args: { p_id: string }; Returns: Json };
+      gastos_del_dia: {
+        Args: { p_fecha: string };
+        Returns: {
+          total: number;
+        }[];
+      };
+      insertar_semilla: { Args: { p_usuario: string }; Returns: undefined };
       naturaleza_de: { Args: { tipo: string }; Returns: string };
+      partes_o_vacio: { Args: { p_partes: Json }; Returns: Json };
+      reemplazar_movimiento: {
+        Args: {
+          p_categoria_id: string;
+          p_cuenta_destino_id: string;
+          p_cuenta_origen_id: string;
+          p_descripcion: string;
+          p_fecha: string;
+          p_id: string;
+          p_monto: number;
+          p_nota: string;
+          p_partes: Json;
+          p_tipo: string;
+        };
+        Returns: string;
+      };
+      registrar_movimiento: {
+        Args: {
+          p_categoria_id: string;
+          p_cuenta_destino_id: string;
+          p_cuenta_origen_id: string;
+          p_descripcion: string;
+          p_fecha: string;
+          p_monto: number;
+          p_nota: string;
+          p_partes: Json;
+          p_tipo: string;
+        };
+        Returns: string;
+      };
       reordenar_cuentas: {
         Args: { p_ids: string[]; p_naturaleza: string };
+        Returns: undefined;
+      };
+      validar_escritura_movimiento: {
+        Args: {
+          p_categoria_id: string;
+          p_cuenta_destino_id: string;
+          p_cuenta_origen_id: string;
+          p_monto: number;
+          p_partes: Json;
+          p_tipo: string;
+          p_usuario: string;
+        };
         Returns: undefined;
       };
     };

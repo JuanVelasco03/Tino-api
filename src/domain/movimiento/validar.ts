@@ -1,32 +1,79 @@
-export type TipoMovimiento = "gasto" | "ingreso" | "transferencia";
+import type { MovimientoEntrada } from "./movimiento.js";
 
-export type MovimientoEntrada = {
-  tipo: TipoMovimiento;
-  /** Unidades menores, positivo. */
-  monto: bigint;
-  cuentaOrigenId?: string | null;
-  cuentaDestinoId?: string | null;
-  categoriaId?: string | null;
-};
-
-export type CodigoError =
+export type CodigoErrorMovimiento =
+  | "MONTO_REQUERIDO"
   | "ORIGEN_REQUERIDO"
   | "DESTINO_REQUERIDO"
+  | "ORIGEN_NO_PERMITIDO"
+  | "DESTINO_NO_PERMITIDO"
   | "CUENTAS_IGUALES"
-  | "CATEGORIA_REQUERIDA"
-  | "CATEGORIA_NO_PERMITIDA";
+  | "CATEGORIA_NO_PERMITIDA"
+  | "DIVISION_NO_PERMITIDA"
+  | "PARTES_CON_CATEGORIA"
+  | "PARTES_INSUFICIENTES"
+  | "PARTES_REPETIDAS"
+  | "PARTES_NO_SUMAN";
 
-export type ResultadoValidacion = {
-  valido: boolean;
-  errores: CodigoError[];
-};
+export type ErrorMovimiento = { codigo: CodigoErrorMovimiento; campo: string };
+
+const informado = (id: string | null): id is string => id !== null && id !== "";
+
+const error = (codigo: CodigoErrorMovimiento, campo: string): ErrorMovimiento => ({
+  codigo,
+  campo,
+});
 
 /**
- * RN-03: transferencia exige origen y destino, informados y distintos.
- * RN-05: transferencia no lleva categoría.
- * Ingreso: destino + categoría. Gasto: origen + categoría.
- * Una cadena vacía cuenta como no informada.
+ * Forma del movimiento según su tipo. Devuelve el primer error o `null`.
+ *
+ * - Gasto: origen, sin destino. Ingreso: destino, sin origen.
+ * - Transferencia (RN-03, RN-05): origen y destino distintos, sin categoría ni división.
+ * - La categoría es opcional («sin clasificar»).
+ * - División: sin categoría propia, dos o más partes con monto > 0, categorías
+ *   distintas, que sumen el monto.
+ *
+ * Una cadena vacía cuenta como cuenta no informada. Que las cuentas y
+ * categorías existan, sean del usuario y del tipo lo garantiza la base.
  */
-export function validarMovimiento(_movimiento: MovimientoEntrada): ResultadoValidacion {
-  throw new Error("No implementado: validarMovimiento");
+export function validarMovimiento(m: MovimientoEntrada): ErrorMovimiento | null {
+  if (m.monto <= 0n) return error("MONTO_REQUERIDO", "monto");
+
+  const origen = informado(m.cuentaOrigenId);
+  const destino = informado(m.cuentaDestinoId);
+  const partes = m.partes ?? [];
+
+  switch (m.tipo) {
+    case "gasto":
+      if (!origen) return error("ORIGEN_REQUERIDO", "cuentaOrigenId");
+      if (destino) return error("DESTINO_NO_PERMITIDO", "cuentaDestinoId");
+      break;
+    case "ingreso":
+      if (!destino) return error("DESTINO_REQUERIDO", "cuentaDestinoId");
+      if (origen) return error("ORIGEN_NO_PERMITIDO", "cuentaOrigenId");
+      break;
+    case "transferencia":
+      if (!origen) return error("ORIGEN_REQUERIDO", "cuentaOrigenId");
+      if (!destino) return error("DESTINO_REQUERIDO", "cuentaDestinoId");
+      if (m.cuentaOrigenId === m.cuentaDestinoId) {
+        return error("CUENTAS_IGUALES", "cuentaDestinoId");
+      }
+      if (informado(m.categoriaId)) return error("CATEGORIA_NO_PERMITIDA", "categoriaId");
+      if (partes.length > 0) return error("DIVISION_NO_PERMITIDA", "partes");
+      return null;
+  }
+
+  if (partes.length === 0) return null;
+  if (informado(m.categoriaId)) return error("PARTES_CON_CATEGORIA", "partes");
+  if (partes.length < 2) return error("PARTES_INSUFICIENTES", "partes");
+
+  const vistas = new Set<string>();
+  let total = 0n;
+  for (const [i, parte] of partes.entries()) {
+    if (parte.monto <= 0n) return error("MONTO_REQUERIDO", `partes.${i}.monto`);
+    if (vistas.has(parte.categoriaId)) return error("PARTES_REPETIDAS", "partes");
+    vistas.add(parte.categoriaId);
+    total += parte.monto;
+  }
+  if (total !== m.monto) return error("PARTES_NO_SUMAN", "partes");
+  return null;
 }

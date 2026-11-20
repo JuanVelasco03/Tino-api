@@ -1,6 +1,6 @@
 # Cuentas
 
-> **Spec de origen:** SPEC 03 · **Necesidades:** `specs/necesidades/cuentas.md`
+> **Spec de origen:** SPEC 03 (saldo con movimientos y `CUENTA_CON_MOVIMIENTOS`: SPEC 04) · **Necesidades:** `specs/necesidades/cuentas.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Cuentas del usuario agrupadas en activos y pasivos, con saldos, totales y
@@ -8,8 +8,9 @@ patrimonio neto calculados por la API. Alta, edición, orden, archivo,
 restauración y borrado.
 
 **Hoy existen:** `efectivo`, `banco` y `tarjeta_credito` (sin ciclo), todas en
-COP. **Todavía no:** USD y TRM, inversiones, préstamos, deudas, ciclo de la
-tarjeta (corte, pago límite) ni movimientos. El cliente no debe dibujar datos
+COP. **Todavía no:** USD y TRM, inversiones, préstamos, deudas ni ciclo de la
+tarjeta (corte, pago límite). Los movimientos viven en
+[`movimientos.md`](movimientos.md). El cliente no debe dibujar datos
 de esas funciones como si vinieran de la API.
 
 ---
@@ -82,9 +83,14 @@ leyenda «deuda» son presentación y los pone el cliente según `naturaleza`:
 
 ### Saldo actual
 
-Hoy, sin movimientos, `saldo` es igual a `saldoInicial`. Cuando lleguen los
-movimientos, `saldo` incluirá su efecto sin cambiar el contrato. El cliente usa
-siempre `saldo` para mostrar y `saldoInicial` solo para editarlo.
+`saldo` = `saldoInicial` + efecto de **todos** los movimientos de la cuenta
+(SPEC 04), también los de fecha futura. En un activo, un gasto lo baja y un
+ingreso lo sube; en un pasivo (tarjeta), un gasto sube la deuda y una
+transferencia hacia la tarjeta (pago) la baja. Se recalcula en cada lectura:
+tras crear, editar o eliminar un movimiento, `GET /cuentas` ya lo refleja.
+
+El cliente usa siempre `saldo` para mostrar y `saldoInicial` solo para
+editarlo.
 
 ---
 
@@ -247,9 +253,9 @@ cambios. **La confirmación la pide el cliente** antes de llamar.
 | Estado | `codigo` | Cuándo |
 |---|---|---|
 | 404 | `CUENTA_NO_ENCONTRADA` | No existe o es de otro usuario. |
+| 409 | `CUENTA_CON_MOVIMIENTOS` | La cuenta tiene movimientos: no se borra, se archiva (con saldo cero). |
 
-> Cuando lleguen los movimientos, una cuenta con movimientos no se podrá
-> borrar (el error se documentará entonces) y habrá que archivarla.
+Si era la cuenta predeterminada del perfil, el perfil queda sin elegida.
 
 ---
 
@@ -333,6 +339,7 @@ un nombre nuevo al usuario y reintentar con `{ "nombre": "Nequi vieja" }`.
 | `CUENTA_ARCHIVADA` | 409 | — | La cuenta está archivada. Restáurala para modificarla. |
 | `CUENTA_NO_ARCHIVADA` | 409 | — | La cuenta no está archivada. |
 | `SALDO_NO_CERO` | 409 | — | Solo puedes archivar una cuenta con saldo cero. |
+| `CUENTA_CON_MOVIMIENTOS` | 409 | — | La cuenta tiene movimientos. Archívala en lugar de eliminarla. |
 
 Más los comunes: `NO_AUTENTICADO`, `ENTRADA_INVALIDA`, `ERROR_INTERNO`.
 

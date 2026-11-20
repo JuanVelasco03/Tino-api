@@ -203,6 +203,8 @@ export class CuentasRepository {
       .delete()
       .eq("id", id)
       .select("id");
+    // FK on delete restrict desde movimientos (SPEC 04): se archiva, no se elimina.
+    if (error?.code === "23503") throw new ErrorApi("CUENTA_CON_MOVIMIENTOS");
     if (error) throw traducir(error);
     if (data.length === 0) throw new ErrorApi("CUENTA_NO_ENCONTRADA");
   }

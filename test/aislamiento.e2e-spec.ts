@@ -249,4 +249,251 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
       expect(soloAjena?.message).toBe("ORDEN_INVALIDO");
     });
   });
+
+  describe("movimientos, categorías y reglas (SPEC 04)", () => {
+    type Datos = { cuenta: string; comida: string; movimiento: string; regla: string };
+    let datosA: Datos;
+    let datosB: Datos;
+    const hoy = new Date().toISOString().slice(0, 10);
+
+    async function categoria(u: Usuario, nombre: string): Promise<string> {
+      const { data, error } = await u.cliente
+        .from("categorias")
+        .select("id")
+        .eq("nombre", nombre)
+        .single();
+      if (error || !data) throw new Error(`Sin categoría ${nombre}: ${error?.message}`);
+      return data.id as string;
+    }
+
+    async function preparar(u: Usuario, nombreCuenta: string, concepto: string): Promise<Datos> {
+      const { data: cuenta, error } = await u.cliente
+        .from("cuentas")
+        .insert({ nombre: nombreCuenta, tipo: "banco", saldo_inicial: 100000 })
+        .select("id")
+        .single();
+      if (error || !cuenta) throw new Error(`No se pudo crear la cuenta: ${error?.message}`);
+      const comida = await categoria(u, "Comida");
+
+      const { data: movimiento, error: errorMov } = await u.cliente.rpc("registrar_movimiento", {
+        p_tipo: "gasto",
+        p_monto: "15000",
+        p_fecha: hoy,
+        p_descripcion: concepto,
+        p_nota: null,
+        p_cuenta_origen_id: cuenta.id,
+        p_cuenta_destino_id: null,
+        p_categoria_id: null,
+        p_partes: [
+          { categoria_id: comida, monto: "10000" },
+          { categoria_id: await categoria(u, "Mercado"), monto: "5000" },
+        ],
+      });
+      if (errorMov) throw new Error(`No se pudo registrar: ${errorMov.message}`);
+
+      // Una edición para que haya fila en movimientos_cambios.
+      const { error: errorEdicion } = await u.cliente.rpc("reemplazar_movimiento", {
+        p_id: movimiento,
+        p_tipo: "gasto",
+        p_monto: "15000",
+        p_fecha: hoy,
+        p_descripcion: `${concepto} editado`,
+        p_nota: null,
+        p_cuenta_origen_id: cuenta.id,
+        p_cuenta_destino_id: null,
+        p_categoria_id: comida,
+        p_partes: null,
+      });
+      if (errorEdicion) throw new Error(`No se pudo editar: ${errorEdicion.message}`);
+      // Y otro dividido, para que haya partes visibles.
+      const { error: errorDividido } = await u.cliente.rpc("registrar_movimiento", {
+        p_tipo: "gasto",
+        p_monto: "3000",
+        p_fecha: hoy,
+        p_descripcion: concepto,
+        p_nota: null,
+        p_cuenta_origen_id: cuenta.id,
+        p_cuenta_destino_id: null,
+        p_categoria_id: null,
+        p_partes: [
+          { categoria_id: comida, monto: "1000" },
+          { categoria_id: await categoria(u, "Ocio"), monto: "2000" },
+        ],
+      });
+      if (errorDividido) throw new Error(`No se pudo dividir: ${errorDividido.message}`);
+
+      const { data: regla } = await u.cliente
+        .from("reglas_categoria")
+        .select("id")
+        .eq("palabra_clave", "almuerzo")
+        .single();
+      return { cuenta: cuenta.id, comida, movimiento: movimiento as string, regla: regla!.id };
+    }
+
+    beforeAll(async () => {
+      datosA = await preparar(a, "Mov A", "Almuerzo A");
+      datosB = await preparar(b, "Mov B", "Almuerzo B");
+    });
+
+    it("el usuario nuevo tiene sus 13 categorías y sus reglas sembradas", async () => {
+      for (const u of [a, b]) {
+        const { data: categorias } = await u.cliente.from("categorias").select("usuario_id");
+        expect(categorias).toHaveLength(13);
+        expect(categorias!.every((c) => c.usuario_id === u.id)).toBe(true);
+
+        const { data: reglas } = await u.cliente.from("reglas_categoria").select("usuario_id");
+        expect(reglas!.length).toBeGreaterThan(0);
+        expect(reglas!.every((r) => r.usuario_id === u.id)).toBe(true);
+      }
+    });
+
+    it("nadie ve movimientos, partes, historial, categorías ni reglas ajenos", async () => {
+      for (const [u, otro] of [
+        [a, b],
+        [b, a],
+      ] as const) {
+        for (const tabla of [
+          "movimientos",
+          "movimientos_detalle",
+          "movimiento_partes",
+          "movimientos_cambios",
+          "categorias",
+          "reglas_categoria",
+        ]) {
+          const { data, error } = await u.cliente.from(tabla).select("usuario_id");
+          expect(error).toBeNull();
+          expect(data!.length).toBeGreaterThan(0);
+          expect(data!.some((f) => f.usuario_id === otro.id)).toBe(false);
+        }
+      }
+    });
+
+    it("INSERT, UPDATE y DELETE directos en movimientos y movimiento_partes no cambian nada", async () => {
+      const { error: insercion } = await a.cliente.from("movimientos").insert({
+        usuario_id: a.id,
+        tipo: "gasto",
+        monto: 1,
+        fecha: hoy,
+        cuenta_origen_id: datosA.cuenta,
+      });
+      expect(insercion).not.toBeNull();
+
+      const { error: insercionParte } = await a.cliente.from("movimiento_partes").insert({
+        movimiento_id: datosA.movimiento,
+        usuario_id: a.id,
+        categoria_id: datosA.comida,
+        monto: 1,
+      });
+      expect(insercionParte).not.toBeNull();
+
+      for (const tabla of ["movimientos", "movimiento_partes"]) {
+        const { data: actualizadas } = await a.cliente
+          .from(tabla)
+          .update({ monto: 1 })
+          .neq("monto", 0)
+          .select("id");
+        expect(actualizadas ?? []).toEqual([]);
+        const { data: borradas } = await a.cliente
+          .from(tabla)
+          .delete()
+          .neq("monto", 0)
+          .select("id");
+        expect(borradas ?? []).toEqual([]);
+      }
+
+      const { data: real } = await admin
+        .from("movimientos")
+        .select("monto::text")
+        .eq("id", datosA.movimiento)
+        .single();
+      expect(real?.monto).toBe("15000");
+    });
+
+    it("registrar_movimiento con la cuenta o la categoría ajena falla", async () => {
+      const base = {
+        p_tipo: "gasto",
+        p_monto: "1000",
+        p_fecha: hoy,
+        p_descripcion: null,
+        p_nota: null,
+        p_cuenta_destino_id: null,
+        p_partes: null,
+      };
+      const conCuentaAjena = await a.cliente.rpc("registrar_movimiento", {
+        ...base,
+        p_cuenta_origen_id: datosB.cuenta,
+        p_categoria_id: null,
+      });
+      expect(conCuentaAjena.error?.code).toBe("23503");
+
+      const conCategoriaAjena = await a.cliente.rpc("registrar_movimiento", {
+        ...base,
+        p_cuenta_origen_id: datosA.cuenta,
+        p_categoria_id: datosB.comida,
+      });
+      expect(conCategoriaAjena.error?.code).toBe("23503");
+
+      const conParteAjena = await a.cliente.rpc("registrar_movimiento", {
+        ...base,
+        p_cuenta_origen_id: datosA.cuenta,
+        p_categoria_id: null,
+        p_partes: [
+          { categoria_id: datosA.comida, monto: "500" },
+          { categoria_id: datosB.comida, monto: "500" },
+        ],
+      });
+      expect(conParteAjena.error?.message).toBe("CATEGORIA_INVALIDA:partes");
+    });
+
+    it("reemplazar_movimiento y eliminar_movimiento sobre el ajeno lanzan MOVIMIENTO_NO_ENCONTRADO", async () => {
+      const reemplazo = await a.cliente.rpc("reemplazar_movimiento", {
+        p_id: datosB.movimiento,
+        p_tipo: "gasto",
+        p_monto: "1",
+        p_fecha: hoy,
+        p_descripcion: null,
+        p_nota: null,
+        p_cuenta_origen_id: datosA.cuenta,
+        p_cuenta_destino_id: null,
+        p_categoria_id: null,
+        p_partes: null,
+      });
+      expect(reemplazo.error?.message).toBe("MOVIMIENTO_NO_ENCONTRADO");
+
+      const eliminacion = await a.cliente.rpc("eliminar_movimiento", { p_id: datosB.movimiento });
+      expect(eliminacion.error?.message).toBe("MOVIMIENTO_NO_ENCONTRADO");
+
+      const { data: sigue } = await admin
+        .from("movimientos")
+        .select("monto::text")
+        .eq("id", datosB.movimiento)
+        .single();
+      expect(sigue?.monto).toBe("15000");
+    });
+
+    it("gastos_del_dia y conceptos_frecuentes solo cuentan lo propio", async () => {
+      const { data: total } = await a.cliente
+        .rpc("gastos_del_dia", { p_fecha: hoy })
+        .select("total::text")
+        .single();
+      expect(total).toEqual({ total: "18000" });
+
+      const { data: frecuentes } = await a.cliente.rpc("conceptos_frecuentes", {
+        p_desde: "2000-01-01",
+        p_limite: 6,
+      });
+      const descripciones = (frecuentes as { descripcion: string }[]).map((f) => f.descripcion);
+      expect(descripciones).toEqual(expect.arrayContaining(["Almuerzo A"]));
+      expect(descripciones.some((d) => d.includes("B"))).toBe(false);
+    });
+
+    it("PATCH directo de una regla ajena afecta 0 filas", async () => {
+      const { data } = await a.cliente
+        .from("reglas_categoria")
+        .update({ categoria_id: datosA.comida })
+        .eq("id", datosB.regla)
+        .select("id");
+      expect(data).toEqual([]);
+    });
+  });
 });
