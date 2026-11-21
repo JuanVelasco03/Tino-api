@@ -64,6 +64,8 @@ export const CATALOGO = {
   MONTO_REQUERIDO: { estado: 400, mensaje: "Escribe un monto mayor que cero.", campo: "monto" },
   FECHA_INVALIDA: { estado: 400, mensaje: "Escribe una fecha válida.", campo: "fecha" },
   MES_INVALIDO: { estado: 400, mensaje: "Escribe un mes válido (AAAA-MM).", campo: "mes" },
+  // Resumen del mes (SPEC 06)
+  MES_FUTURO: { estado: 400, mensaje: "Ese mes todavía no llega.", campo: "mes" },
   DESCRIPCION_LARGA: {
     estado: 400,
     mensaje: "La descripción admite hasta 80 caracteres.",

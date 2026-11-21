@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { esFechaValida, esMesValido, mesLocal, rangoDelMes, restarDias } from "./mes.js";
+import {
+  esFechaValida,
+  esMesValido,
+  mesAnterior,
+  mesesAnteriores,
+  mesLocal,
+  rangoDelMes,
+  restarDias,
+  ultimoDia,
+} from "./mes.js";
 
 describe("rangoDelMes", () => {
   it("febrero de 2026 va del 1 al 28", () => {
@@ -62,5 +71,52 @@ describe("restarDias", () => {
 
   it("con cero devuelve la misma fecha", () => {
     expect(restarDias("2026-11-19", 0)).toBe("2026-11-19");
+  });
+});
+
+describe("mesAnterior", () => {
+  it("enero pasa a diciembre del año anterior", () => {
+    expect(mesAnterior("2026-01")).toBe("2025-12");
+  });
+
+  it("dentro del año resta un mes", () => {
+    expect(mesAnterior("2026-11")).toBe("2026-10");
+  });
+
+  it("lanza con un mes inválido", () => {
+    expect(() => mesAnterior("2026-13")).toThrow();
+  });
+});
+
+describe("ultimoDia", () => {
+  it("febrero de 2026 termina el 28 y el bisiesto el 29", () => {
+    expect(ultimoDia("2026-02")).toBe("2026-02-28");
+    expect(ultimoDia("2028-02")).toBe("2028-02-29");
+  });
+});
+
+describe("mesesAnteriores", () => {
+  it("los 11 meses anteriores a 2026-11 van de 2025-12 a 2026-10", () => {
+    const meses = mesesAnteriores("2026-11", 11);
+    expect(meses).toHaveLength(11);
+    expect(meses[0]).toBe("2025-12");
+    expect(meses.at(-1)).toBe("2026-10");
+    expect(meses).toEqual([
+      "2025-12",
+      "2026-01",
+      "2026-02",
+      "2026-03",
+      "2026-04",
+      "2026-05",
+      "2026-06",
+      "2026-07",
+      "2026-08",
+      "2026-09",
+      "2026-10",
+    ]);
+  });
+
+  it("con cero devuelve una lista vacía", () => {
+    expect(mesesAnteriores("2026-11", 0)).toEqual([]);
   });
 });

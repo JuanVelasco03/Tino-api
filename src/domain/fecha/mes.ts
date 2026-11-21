@@ -52,3 +52,26 @@ export function restarDias(fecha: string, dias: number): string {
     dosDigitos(resultado.getUTCDate()),
   ].join("-");
 }
+
+/** Mes anterior: "2026-01" → "2025-12". Lanza si el mes no es válido. */
+export function mesAnterior(mes: string): string {
+  if (!esMesValido(mes)) throw new Error(`Mes inválido: ${mes}`);
+  const [anio, numero] = mes.split("-").map(Number) as [number, number];
+  return numero === 1 ? `${anio - 1}-12` : `${anio}-${dosDigitos(numero - 1)}`;
+}
+
+/** Último día del mes ("YYYY-MM-DD"). Lanza si el mes no es válido. */
+export function ultimoDia(mes: string): string {
+  return rangoDelMes(mes).hasta;
+}
+
+/** Los `cantidad` meses anteriores a `mes`, en orden ascendente (sin incluir `mes`). */
+export function mesesAnteriores(mes: string, cantidad: number): string[] {
+  const meses: string[] = [];
+  let actual = mes;
+  for (let i = 0; i < cantidad; i++) {
+    actual = mesAnterior(actual);
+    meses.unshift(actual);
+  }
+  return meses;
+}

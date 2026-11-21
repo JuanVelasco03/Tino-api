@@ -1,6 +1,6 @@
 # SPEC 06 — Resumen del mes
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 03, SPEC 04, SPEC 05
 > **Fecha:** 2026-11-21
 > **Objetivo:** Que `GET /resumen?mes=` dé las cifras de un mes (ingresos, gastos, resultado y gasto por categoría, comparados con el mes anterior), la serie de patrimonio de 12 meses y el puente del patrimonio del mes, todo calculado por la API.
@@ -302,31 +302,31 @@ Escenario e2e. `M` es el mes actual y `M−1` el anterior. Las cuentas Nequi (ba
 
 Con ese escenario:
 
-- [ ] `npm test`, `npm run lint` y `npm run typecheck` pasan.
-- [ ] `GET /resumen` sin `mes` responde el mes actual. `?mes=2026-13` → `400 MES_INVALIDO`. El mes siguiente al actual → `400 MES_FUTURO`.
-- [ ] `GET /resumen?mes=M`:
+- [x] `npm test`, `npm run lint` y `npm run typecheck` pasan.
+- [x] `GET /resumen` sin `mes` responde el mes actual. `?mes=2026-13` → `400 MES_INVALIDO`. El mes siguiente al actual → `400 MES_FUTURO`.
+- [x] `GET /resumen?mes=M`:
   - `cantidadMovimientos` es 3.
   - `ingresos`: `{ actual: "0", anterior: "2000000", variacion: "-2000000", variacionPorcentaje: -1000 }`.
   - `gastos`: `{ "300000", "420000", "-120000", -286 }`.
   - `resultado`: `{ "-300000", "1580000", "-1880000", -1190 }`.
-- [ ] `categorias` va en este orden: Comida (`"260000"`, anterior `"300000"`, porcentaje 867), Mercado (`"30000"`, anterior `"0"`, porcentaje 100) y Transporte (`"0"`, anterior `"20000"`, variación `"-20000"`, porcentaje 0).
-- [ ] `sinCategoria` es `{ monto: "10000", anterior: "100000", variacion: "-90000", porcentaje: 33, cantidad: 1 }`.
-- [ ] `cambioDelMes` de `M`: anterior `"2580000"`, resultado `"-300000"`, otros `"0"` y cierre `"2280000"`. `patrimonio.hoy` es `"2280000"`.
-- [ ] La serie tiene dos puntos: el último día de `M−1` con `"2580000"` y hoy con `"2280000"`. `variacionSerie` es `"-300000"`.
-- [ ] Tras `PATCH` de Nequi con `saldoInicial: "1100000"`, `M` da otros `"100000"` y cierre `"2380000"`. El punto de `M−1` sigue en `"2580000"`.
-- [ ] Tras crear Efectivo con `"45000"`, `M` da otros `"145000"` y `cuentasActivas` es 3.
-- [ ] `GET /resumen?mes=M−1`: anterior `"0"`, resultado `"1580000"`, otros `"1000000"` y cierre `"2580000"`. El saldo inicial vigente en `M−1` sigue siendo el de antes de la edición.
-- [ ] Un mes anterior a `M−1` responde `200` con cifras y puente en cero.
-- [ ] Usuario nuevo con una cuenta de `"975372"` y sin movimientos:
+- [x] `categorias` va en este orden: Comida (`"260000"`, anterior `"300000"`, porcentaje 867), Mercado (`"30000"`, anterior `"0"`, porcentaje 100) y Transporte (`"0"`, anterior `"20000"`, variación `"-20000"`, porcentaje 0).
+- [x] `sinCategoria` es `{ monto: "10000", anterior: "100000", variacion: "-90000", porcentaje: 33, cantidad: 1 }`.
+- [x] `cambioDelMes` de `M`: anterior `"2580000"`, resultado `"-300000"`, otros `"0"` y cierre `"2280000"`. `patrimonio.hoy` es `"2280000"`.
+- [x] La serie tiene dos puntos: el último día de `M−1` con `"2580000"` y hoy con `"2280000"`. `variacionSerie` es `"-300000"`.
+- [x] Tras `PATCH` de Nequi con `saldoInicial: "1100000"`, `M` da otros `"100000"` y cierre `"2380000"`. El punto de `M−1` sigue en `"2580000"`.
+- [x] Tras crear Efectivo con `"45000"`, `M` da otros `"145000"` y `cuentasActivas` es 3.
+- [x] `GET /resumen?mes=M−1`: anterior `"0"`, resultado `"1580000"`, otros `"1000000"` y cierre `"2580000"`. El saldo inicial vigente en `M−1` sigue siendo el de antes de la edición.
+- [x] Un mes anterior a `M−1` responde `200` con cifras y puente en cero.
+- [x] Usuario nuevo con una cuenta de `"975372"` y sin movimientos:
   - `tieneMovimientos: false`;
   - las tres cifras en `"0"`, con `variacionPorcentaje: null`;
   - `categorias: []`;
   - la serie tiene un punto: hoy, con `"975372"`;
   - `inicio` es hoy.
-- [ ] Un segundo usuario recibe su resumen sin ninguna cifra del primero.
-- [ ] Ningún porcentaje del DTO es un número con decimales.
-- [ ] Ningún archivo de `src/domain/` importa `@nestjs/*`, `zod` ni `@supabase/*`. Ningún monto pasa por `number`.
-- [ ] `docs/api/resumen.md` existe y `README.md` lo enlaza.
+- [x] Un segundo usuario recibe su resumen sin ninguna cifra del primero.
+- [x] Ningún porcentaje del DTO es un número con decimales.
+- [x] Ningún archivo de `src/domain/` importa `@nestjs/*`, `zod` ni `@supabase/*`. Ningún monto pasa por `number`.
+- [x] `docs/api/resumen.md` existe y `README.md` lo enlaza.
 
 ## Decisiones
 
