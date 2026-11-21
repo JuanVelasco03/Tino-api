@@ -16,7 +16,8 @@ import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:cr
 export type ColumnaMonto =
   | { tabla: "movimientos"; columna: "monto" }
   | { tabla: "movimiento_partes"; columna: "monto" }
-  | { tabla: "cuentas"; columna: "saldo_inicial" | "cupo" };
+  | { tabla: "cuentas"; columna: "saldo_inicial" | "cupo" }
+  | { tabla: "recurrentes"; columna: "monto" };
 
 /** Dónde vive el valor. `idFila` de una parte: `<movimiento_id>:<categoria_id>`. */
 export type ContextoMonto = ColumnaMonto & { usuarioId: string; idFila: string };
@@ -39,6 +40,12 @@ export const contexto = {
     usuarioId,
     tabla: "cuentas",
     columna,
+    idFila: id,
+  }),
+  recurrente: (usuarioId: string, id: string): ContextoMonto => ({
+    usuarioId,
+    tabla: "recurrentes",
+    columna: "monto",
     idFila: id,
   }),
 };

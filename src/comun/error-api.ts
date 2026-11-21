@@ -151,6 +151,44 @@ export const CATALOGO = {
     campo: "palabraClave",
   },
   REGLA_NO_ENCONTRADA: { estado: 404, mensaje: "La regla no existe." },
+  // Recurrentes (SPEC 07)
+  RECURRENTE_NO_ENCONTRADO: { estado: 404, mensaje: "El recurrente no existe." },
+  CONCEPTO_REQUERIDO: { estado: 400, mensaje: "Escribe un concepto.", campo: "concepto" },
+  CONCEPTO_LARGO: {
+    estado: 400,
+    mensaje: "El concepto admite hasta 80 caracteres.",
+    campo: "concepto",
+  },
+  PERIODICIDAD_INVALIDA: {
+    estado: 400,
+    mensaje: "Elige una periodicidad válida.",
+    campo: "periodicidad",
+  },
+  PRIMER_VENCIMIENTO_PASADO: {
+    estado: 400,
+    mensaje: "El primer vencimiento no puede ser anterior a hoy.",
+    campo: "primerVencimiento",
+  },
+  ULTIMO_DIA_NO_PERMITIDO: {
+    estado: 400,
+    mensaje: '"Último día" solo aplica a periodicidades de un mes o más.',
+    campo: "ultimoDia",
+  },
+  OCURRENCIA_INVALIDA: {
+    estado: 422,
+    mensaje: "Esa fecha no es un vencimiento por confirmar.",
+    campo: "vencimiento",
+  },
+  OCURRENCIA_CERRADA: {
+    estado: 409,
+    mensaje: "Ese vencimiento ya se confirmó u omitió.",
+    campo: "vencimiento",
+  },
+  OMISION_NO_ENCONTRADA: { estado: 404, mensaje: "No hay una omisión para ese vencimiento." },
+  CUENTA_CON_RECURRENTES: {
+    estado: 409,
+    mensaje: "La cuenta tiene recurrentes. Cámbialos o elimínalos primero.",
+  },
   NO_AUTENTICADO: { estado: 401, mensaje: "Inicia sesión para continuar." },
   ERROR_INTERNO: {
     estado: 500,

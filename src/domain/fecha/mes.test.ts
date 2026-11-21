@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  diasDe,
+  diasEntre,
   esFechaValida,
   esMesValido,
   mesAnterior,
@@ -7,6 +9,9 @@ import {
   mesLocal,
   rangoDelMes,
   restarDias,
+  sumarDias,
+  sumarMeses,
+  mesesEntre,
   ultimoDia,
 } from "./mes.js";
 
@@ -118,5 +123,37 @@ describe("mesesAnteriores", () => {
 
   it("con cero devuelve una lista vacía", () => {
     expect(mesesAnteriores("2026-11", 0)).toEqual([]);
+  });
+});
+
+describe("sumarDias", () => {
+  it("cruza meses y años", () => {
+    expect(sumarDias("2026-11-28", 7)).toBe("2026-12-05");
+    expect(sumarDias("2026-12-30", 3)).toBe("2027-01-02");
+  });
+});
+
+describe("sumarMeses y mesesEntre", () => {
+  it("suma y resta meses cruzando años", () => {
+    expect(sumarMeses("2026-11", 2)).toBe("2027-01");
+    expect(sumarMeses("2027-01", -1)).toBe("2026-12");
+    expect(sumarMeses("2026-11", 12)).toBe("2027-11");
+  });
+
+  it("cuenta los meses entre dos meses", () => {
+    expect(mesesEntre("2026-11", "2027-02")).toBe(3);
+    expect(mesesEntre("2027-02", "2026-11")).toBe(-3);
+  });
+});
+
+describe("diasEntre y diasDe", () => {
+  it("cuenta días cruzando febrero", () => {
+    expect(diasEntre("2027-02-27", "2027-03-01")).toBe(2);
+    expect(diasEntre("2027-03-01", "2027-02-27")).toBe(-2);
+  });
+
+  it("días de febrero, normal y bisiesto", () => {
+    expect(diasDe("2027-02")).toBe(28);
+    expect(diasDe("2028-02")).toBe(29);
   });
 });
