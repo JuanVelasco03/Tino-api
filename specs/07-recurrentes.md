@@ -1,6 +1,6 @@
 # SPEC 07 — Recurrentes
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 03, SPEC 04, SPEC 05
 > **Fecha:** 2026-11-21
 > **Objetivo:** Que la API guarde plantillas recurrentes, derive sus ocurrencias (bandeja por confirmar, comprometido del mes, ingresos esperados) y permita confirmarlas como movimientos, omitirlas o deshacer, sin que nada toque saldos sin el usuario (RN-10).
@@ -491,53 +491,53 @@ Endpoint → N-xx:
 
 `H` es hoy en la zona del perfil. Cuenta Nequi (banco, saldo inicial `"500000"`).
 
-- [ ] `npm test`, `npm run lint` y `npm run typecheck` pasan.
-- [ ] `list_migrations` muestra la migración y el archivo existe en `supabase/migrations/`.
-- [ ] `get_advisors` (security) no reporta avisos sobre las tablas, la vista ni las funciones nuevas.
-- [ ] `test/aislamiento.e2e-spec.ts` pasa con las comprobaciones del paso 3.
-- [ ] `POST /recurrentes` de un gasto mensual «Internet» de `"89900"` desde Nequi con `primerVencimiento = H+3`:
+- [x] `npm test`, `npm run lint` y `npm run typecheck` pasan.
+- [x] `list_migrations` muestra la migración y el archivo existe en `supabase/migrations/`.
+- [x] `get_advisors` (security) no reporta avisos sobre las tablas, la vista ni las funciones nuevas.
+- [x] `test/aislamiento.e2e-spec.ts` pasa con las comprobaciones del paso 3.
+- [x] `POST /recurrentes` de un gasto mensual «Internet» de `"89900"` desde Nequi con `primerVencimiento = H+3`:
   - responde `201`;
   - en la BD, `recurrentes.monto` cumple `^v1\.`;
   - `GET /recurrentes` trae en `bandeja` una ocurrencia `por_confirmar` en `H+3`, con `estimado: false`;
   - el saldo de Nequi en `GET /cuentas` sigue en `"500000"`.
-- [ ] Una plantilla con `primerVencimiento = H+8` no está en la bandeja y su ocurrencia es `programada`.
-- [ ] `primerVencimiento = H−1` → `400 PRIMER_VENCIMIENTO_PASADO`. `ultimoDia: true` con `semanal` → `400 ULTIMO_DIA_NO_PERMITIDO`.
-- [ ] Una transferencia con `categoriaId` → `400 CATEGORIA_NO_PERMITIDA`. Con origen = destino → `400 CUENTAS_IGUALES`.
-- [ ] `POST /recurrentes/:id/confirmar { vencimiento: H+3 }`:
+- [x] Una plantilla con `primerVencimiento = H+8` no está en la bandeja y su ocurrencia es `programada`.
+- [x] `primerVencimiento = H−1` → `400 PRIMER_VENCIMIENTO_PASADO`. `ultimoDia: true` con `semanal` → `400 ULTIMO_DIA_NO_PERMITIDO`.
+- [x] Una transferencia con `categoriaId` → `400 CATEGORIA_NO_PERMITIDA`. Con origen = destino → `400 CUENTAS_IGUALES`.
+- [x] `POST /recurrentes/:id/confirmar { vencimiento: H+3 }`:
   - responde `201 MovimientoDto` con `fecha` `H+3`, `descripcion` «Internet» y `monto` `"89900"`;
   - Nequi queda en `"410100"`;
   - la ocurrencia queda `pagada` con `movimientoId` y sale de la bandeja.
-- [ ] Repetir la confirmación → `409 OCURRENCIA_CERRADA`, sin un segundo movimiento.
-- [ ] Un `vencimiento` que no está en el calendario → `422 OCURRENCIA_INVALIDA`. Uno `programado` → `422 OCURRENCIA_INVALIDA`.
-- [ ] Una plantilla variable de `"32400"` confirmada con `monto: "35120"` deja `ultimoConfirmado` en `"35120"`. Su siguiente ocurrencia muestra `"35120"` con `estimado: true`.
-- [ ] `DELETE /movimientos/:id` del confirmado:
+- [x] Repetir la confirmación → `409 OCURRENCIA_CERRADA`, sin un segundo movimiento.
+- [x] Un `vencimiento` que no está en el calendario → `422 OCURRENCIA_INVALIDA`. Uno `programado` → `422 OCURRENCIA_INVALIDA`.
+- [x] Una plantilla variable de `"32400"` confirmada con `monto: "35120"` deja `ultimoConfirmado` en `"35120"`. Su siguiente ocurrencia muestra `"35120"` con `estimado: true`.
+- [x] `DELETE /movimientos/:id` del confirmado:
   - devuelve la ocurrencia a `por_confirmar`;
   - Nequi vuelve a su saldo;
   - deja una fila `eliminacion` en `movimientos_cambios`.
-- [ ] `POST /recurrentes/:id/omitir` → `204`:
+- [x] `POST /recurrentes/:id/omitir` → `204`:
   - la ocurrencia queda `omitida` y sale de la bandeja y del comprometido;
   - `DELETE /recurrentes/:id/omisiones/:vencimiento` la devuelve;
   - repetir el `DELETE` → `404 OMISION_NO_ENCONTRADA`.
-- [ ] Con `primer_vencimiento` y `generar_desde` fechados en `H−3` (cliente de servicio), la ocurrencia de `H−3` es `vencida` y va primera en la bandeja.
-- [ ] `comprometido` suma gastos y transferencias del mes, no ingresos. Un ingreso del mes sin confirmar aparece en `ingresosEsperados`.
-- [ ] `PATCH { pausada: true }`:
+- [x] Con `primer_vencimiento` y `generar_desde` fechados en `H−3` (cliente de servicio), la ocurrencia de `H−3` es `vencida` y va primera en la bandeja.
+- [x] `comprometido` suma gastos y transferencias del mes, no ingresos. Un ingreso del mes sin confirmar aparece en `ingresosEsperados`.
+- [x] `PATCH { pausada: true }`:
   - la ocurrencia de `H+3` sale de la bandeja y la vencida de `H−3` sigue.
-- [ ] `PATCH { pausada: false }`:
+- [x] `PATCH { pausada: false }`:
   - pone `generar_desde = H` y `pausadaDesde: null`;
   - deja una fila `edicion` en `recurrentes_cambios` por cada cambio de estado.
-- [ ] `PUT` que cambia el monto deja una fila `edicion`. Un `PUT` idéntico no deja fila.
-- [ ] `PUT` que cambia la periodicidad con `primerVencimiento` pasado → `400 PRIMER_VENCIMIENTO_PASADO`.
-- [ ] `POST /recurrentes` con una cuenta archivada → `409 CUENTA_ARCHIVADA`.
-- [ ] Si la cuenta se archiva después, `confirmar` → `409 CUENTA_ARCHIVADA` y no crea movimiento.
-- [ ] `DELETE /cuentas/:id` de una cuenta sin movimientos con una plantilla → `409 CUENTA_CON_RECURRENTES`.
-- [ ] `DELETE /recurrentes/:id` → `204`:
+- [x] `PUT` que cambia el monto deja una fila `edicion`. Un `PUT` idéntico no deja fila.
+- [x] `PUT` que cambia la periodicidad con `primerVencimiento` pasado → `400 PRIMER_VENCIMIENTO_PASADO`.
+- [x] `POST /recurrentes` con una cuenta archivada → `409 CUENTA_ARCHIVADA`.
+- [x] Si la cuenta se archiva después, `confirmar` → `409 CUENTA_ARCHIVADA` y no crea movimiento.
+- [x] `DELETE /cuentas/:id` de una cuenta sin movimientos con una plantilla → `409 CUENTA_CON_RECURRENTES`.
+- [x] `DELETE /recurrentes/:id` → `204`:
   - el movimiento confirmado sigue en `GET /movimientos`;
   - queda una fila `eliminacion` en `recurrentes_cambios`;
   - no quedan cierres de la plantilla.
-- [ ] Un id ajeno en cualquier ruta `/recurrentes/:id` → `404 RECURRENTE_NO_ENCONTRADO`.
-- [ ] Ninguna ruta devuelve texto de Postgres en `mensaje`.
-- [ ] Ningún archivo de `src/domain/` importa `@nestjs/*`, `zod` ni `@supabase/*`. Ningún monto pasa por `number`.
-- [ ] `docs/api/recurrentes.md` existe y `README.md` lo enlaza.
+- [x] Un id ajeno en cualquier ruta `/recurrentes/:id` → `404 RECURRENTE_NO_ENCONTRADO`.
+- [x] Ninguna ruta devuelve texto de Postgres en `mensaje`.
+- [x] Ningún archivo de `src/domain/` importa `@nestjs/*`, `zod` ni `@supabase/*`. Ningún monto pasa por `number`.
+- [x] `docs/api/recurrentes.md` existe y `README.md` lo enlaza.
 
 ## Decisiones
 

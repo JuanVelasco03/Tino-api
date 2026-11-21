@@ -1,6 +1,6 @@
 # Movimientos
 
-> **Spec de origen:** SPEC 04 · **Necesidades:** `specs/necesidades/captura-rapida.md`
+> **Spec de origen:** SPEC 04 (confirmados de recurrentes: SPEC 07) · **Necesidades:** `specs/necesidades/captura-rapida.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Gastos, ingresos y transferencias: registrar, listar por mes, editar y
@@ -199,6 +199,13 @@ Errores: los del `POST`, más:
 
 Elimina el movimiento. El saldo vuelve a como estaba. **La confirmación la
 pide el cliente.** «Deshacer» un registro recién hecho es esta misma llamada.
+
+Si el movimiento nació al confirmar una ocurrencia recurrente
+(`POST /recurrentes/:id/confirmar`), borrarlo devuelve esa ocurrencia a la
+bandeja: vuelve a `vencida` o `por_confirmar` y deja de contar como pagada
+(ver [`recurrentes.md`](recurrentes.md)). Es el «Deshacer» de una confirmación.
+Editarlo (`PUT`) cambia el `ultimoConfirmado` de la plantilla y, si es
+variable, su estimado.
 
 **204** sin cuerpo.
 

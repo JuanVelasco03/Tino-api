@@ -272,8 +272,15 @@ export class CuentasRepository {
       .delete()
       .eq("id", id)
       .select("id");
-    // FK on delete restrict desde movimientos (SPEC 04): se archiva, no se elimina.
-    if (error?.code === "23503") throw new ErrorApi("CUENTA_CON_MOVIMIENTOS");
+    // FK on delete restrict desde recurrentes (SPEC 07) o desde movimientos
+    // (SPEC 04): con movimientos se archiva, no se elimina.
+    if (error?.code === "23503") {
+      throw new ErrorApi(
+        /recurrentes_cuenta_(origen|destino)_fkey/.test(error.message)
+          ? "CUENTA_CON_RECURRENTES"
+          : "CUENTA_CON_MOVIMIENTOS",
+      );
+    }
     if (error) throw traducir(error);
     if (data.length === 0) throw new ErrorApi("CUENTA_NO_ENCONTRADA");
   }

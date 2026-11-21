@@ -41,6 +41,47 @@ export function rangoDelMes(mes: string): { desde: string; hasta: string } {
   return { desde: `${mes}-01`, hasta: `${mes}-${dosDigitos(diasDelMes(anio, numero))}` };
 }
 
+/** Días del mes ("YYYY-MM"). Lanza si el mes no es válido. */
+export function diasDe(mes: string): number {
+  if (!esMesValido(mes)) throw new Error(`Mes inválido: ${mes}`);
+  const [anio, numero] = mes.split("-").map(Number) as [number, number];
+  return diasDelMes(anio, numero);
+}
+
+/** Fecha `dias` días después de `fecha` ("YYYY-MM-DD"). */
+export function sumarDias(fecha: string, dias: number): string {
+  return restarDias(fecha, -dias);
+}
+
+/** Mes `meses` meses después de `mes` ("YYYY-MM"); admite negativos. */
+export function sumarMeses(mes: string, meses: number): string {
+  if (!esMesValido(mes)) throw new Error(`Mes inválido: ${mes}`);
+  const [anio, numero] = mes.split("-").map(Number) as [number, number];
+  const indice = anio * 12 + (numero - 1) + meses;
+  return `${Math.floor(indice / 12)}-${dosDigitos((indice % 12) + 1)}`;
+}
+
+/** Meses de `desde` a `hasta` ("YYYY-MM"); negativo si `hasta` es anterior. */
+export function mesesEntre(desde: string, hasta: string): number {
+  if (!esMesValido(desde) || !esMesValido(hasta))
+    throw new Error(`Mes inválido: ${desde}, ${hasta}`);
+  const [a1, m1] = desde.split("-").map(Number) as [number, number];
+  const [a2, m2] = hasta.split("-").map(Number) as [number, number];
+  return (a2 - a1) * 12 + (m2 - m1);
+}
+
+/** Días de `desde` a `hasta` ("YYYY-MM-DD"); negativo si `hasta` es anterior. */
+export function diasEntre(desde: string, hasta: string): number {
+  if (!esFechaValida(desde) || !esFechaValida(hasta)) {
+    throw new Error(`Fecha inválida: ${desde}, ${hasta}`);
+  }
+  const utc = (f: string) => {
+    const [anio, mes, dia] = f.split("-").map(Number) as [number, number, number];
+    return Date.UTC(anio, mes - 1, dia);
+  };
+  return Math.round((utc(hasta) - utc(desde)) / 86_400_000);
+}
+
 /** Fecha `dias` días antes de `fecha` ("YYYY-MM-DD"). */
 export function restarDias(fecha: string, dias: number): string {
   if (!esFechaValida(fecha)) throw new Error(`Fecha inválida: ${fecha}`);

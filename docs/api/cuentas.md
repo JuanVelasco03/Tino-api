@@ -1,6 +1,6 @@
 # Cuentas
 
-> **Spec de origen:** SPEC 03 (saldo con movimientos y `CUENTA_CON_MOVIMIENTOS`: SPEC 04) · **Necesidades:** `specs/necesidades/cuentas.md`
+> **Spec de origen:** SPEC 03 (saldo con movimientos y `CUENTA_CON_MOVIMIENTOS`: SPEC 04; `CUENTA_CON_RECURRENTES`: SPEC 07) · **Necesidades:** `specs/necesidades/cuentas.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Cuentas del usuario agrupadas en activos y pasivos, con saldos, totales y
@@ -254,8 +254,13 @@ cambios. **La confirmación la pide el cliente** antes de llamar.
 |---|---|---|
 | 404 | `CUENTA_NO_ENCONTRADA` | No existe o es de otro usuario. |
 | 409 | `CUENTA_CON_MOVIMIENTOS` | La cuenta tiene movimientos: no se borra, se archiva (con saldo cero). |
+| 409 | `CUENTA_CON_RECURRENTES` | Alguna plantilla recurrente usa la cuenta: hay que cambiarla o eliminarla primero (ver [`recurrentes.md`](recurrentes.md)). |
 
 Si era la cuenta predeterminada del perfil, el perfil queda sin elegida.
+
+Archivar una cuenta **no** pausa las plantillas recurrentes que la usan: siguen
+generando ocurrencias y confirmarlas responde `409 CUENTA_ARCHIVADA` (ver
+[`recurrentes.md`](recurrentes.md)).
 
 ---
 
@@ -340,6 +345,7 @@ un nombre nuevo al usuario y reintentar con `{ "nombre": "Nequi vieja" }`.
 | `CUENTA_NO_ARCHIVADA` | 409 | — | La cuenta no está archivada. |
 | `SALDO_NO_CERO` | 409 | — | Solo puedes archivar una cuenta con saldo cero. |
 | `CUENTA_CON_MOVIMIENTOS` | 409 | — | La cuenta tiene movimientos. Archívala en lugar de eliminarla. |
+| `CUENTA_CON_RECURRENTES` | 409 | — | La cuenta tiene recurrentes. Cámbialos o elimínalos primero. |
 
 Más los comunes: `NO_AUTENTICADO`, `ENTRADA_INVALIDA`, `ERROR_INTERNO`.
 

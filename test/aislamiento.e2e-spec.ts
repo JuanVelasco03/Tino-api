@@ -9,6 +9,9 @@
  * SPEC 05: los montos se escriben cifrados con la clave de la API
  * (`test/montos.ts`); la base rechaza un monto en claro. Las aserciones de
  * aislamiento son las mismas.
+ *
+ * SPEC 07: plantillas recurrentes, sus cierres, su historial y
+ * `confirmar_ocurrencia` (security definer) atacada con una plantilla ajena.
  */
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -538,6 +541,200 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
         .update({ categoria_id: datosA.comida })
         .eq("id", datosB.regla)
         .select("id");
+      expect(data).toEqual([]);
+    });
+  });
+
+  describe("recurrentes (SPEC 07)", () => {
+    type Datos = { cuenta: string; categoria: string; recurrente: string; movimiento: string };
+    let datosA: Datos;
+    let datosB: Datos;
+    const hoy = new Date().toISOString().slice(0, 10);
+    const manana = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+
+    const montoRecurrente = (u: Usuario, id: string, valor: bigint) =>
+      cifrador().cifrar(valor, contexto.recurrente(u.id, id));
+    const montoMovimiento = (u: Usuario, id: string, valor: bigint) =>
+      cifrador().cifrar(valor, contexto.movimiento(u.id, id));
+
+    function plantilla(u: Usuario, id: string, cuenta: string, categoria: string | null) {
+      return {
+        id,
+        tipo: "gasto",
+        concepto: "Internet",
+        monto: montoRecurrente(u, id, 89900n),
+        cuenta_origen_id: cuenta,
+        categoria_id: categoria,
+        periodicidad: "mensual",
+        primer_vencimiento: hoy,
+        generar_desde: hoy,
+      };
+    }
+
+    async function preparar(u: Usuario, nombreCuenta: string): Promise<Datos> {
+      const cuenta = randomUUID();
+      const { error: errorCuenta } = await u.cliente.from("cuentas").insert({
+        id: cuenta,
+        nombre: nombreCuenta,
+        tipo: "banco",
+        saldo_inicial: cifrador().cifrar(0n, contexto.cuenta(u.id, cuenta, "saldo_inicial")),
+      });
+      if (errorCuenta) throw new Error(`No se pudo crear la cuenta: ${errorCuenta.message}`);
+      const { data: servicios } = await u.cliente
+        .from("categorias")
+        .select("id")
+        .eq("nombre", "Servicios")
+        .single();
+      const categoria = servicios!.id as string;
+
+      const recurrente = randomUUID();
+      const { error } = await u.cliente
+        .from("recurrentes")
+        .insert(plantilla(u, recurrente, cuenta, categoria));
+      if (error) throw new Error(`No se pudo crear la plantilla: ${error.message}`);
+
+      // Una edición para que haya fila en recurrentes_cambios.
+      const { error: errorEdicion } = await u.cliente
+        .from("recurrentes")
+        .update({ concepto: "Internet hogar" })
+        .eq("id", recurrente);
+      if (errorEdicion) throw new Error(`No se pudo editar: ${errorEdicion.message}`);
+
+      // Un cierre omitido (RLS directa) y uno confirmado (función).
+      const { error: errorOmision } = await u.cliente
+        .from("recurrentes_cierres")
+        .insert({ recurrente_id: recurrente, vencimiento: manana, estado: "omitida" });
+      if (errorOmision) throw new Error(`No se pudo omitir: ${errorOmision.message}`);
+
+      const movimiento = randomUUID();
+      const { error: errorConfirmacion } = await u.cliente.rpc("confirmar_ocurrencia", {
+        p_recurrente_id: recurrente,
+        p_vencimiento: hoy,
+        p_movimiento_id: movimiento,
+        p_monto: montoMovimiento(u, movimiento, 89900n),
+      });
+      if (errorConfirmacion) throw new Error(`No se pudo confirmar: ${errorConfirmacion.message}`);
+
+      return { cuenta, categoria, recurrente, movimiento };
+    }
+
+    beforeAll(async () => {
+      datosA = await preparar(a, "Rec A");
+      datosB = await preparar(b, "Rec B");
+    });
+
+    it("nadie ve plantillas, detalle, cierres ni historial ajenos", async () => {
+      for (const [u, otro] of [
+        [a, b],
+        [b, a],
+      ] as const) {
+        for (const tabla of [
+          "recurrentes",
+          "recurrentes_detalle",
+          "recurrentes_cierres",
+          "recurrentes_cambios",
+        ]) {
+          const { data, error } = await u.cliente.from(tabla).select("usuario_id");
+          expect(error).toBeNull();
+          expect(data!.length).toBeGreaterThan(0);
+          expect(data!.some((f) => f.usuario_id === otro.id)).toBe(false);
+        }
+      }
+    });
+
+    it("INSERT de plantilla con la cuenta o la categoría ajena falla", async () => {
+      const { error: errorCuenta } = await a.cliente
+        .from("recurrentes")
+        .insert(plantilla(a, randomUUID(), datosB.cuenta, null));
+      expect(errorCuenta?.code).toBe("23503");
+
+      const { error: errorCategoria } = await a.cliente
+        .from("recurrentes")
+        .insert(plantilla(a, randomUUID(), datosA.cuenta, datosB.categoria));
+      expect(errorCategoria?.code).toBe("23503");
+    });
+
+    it("INSERT de cierre con la plantilla ajena falla", async () => {
+      const { error } = await a.cliente
+        .from("recurrentes_cierres")
+        .insert({ recurrente_id: datosB.recurrente, vencimiento: "2030-01-01", estado: "omitida" });
+      expect(error).not.toBeNull();
+
+      const { data } = await admin
+        .from("recurrentes_cierres")
+        .select("id")
+        .eq("recurrente_id", datosB.recurrente)
+        .eq("vencimiento", "2030-01-01");
+      expect(data).toEqual([]);
+    });
+
+    it("INSERT directo de un cierre confirmada falla por RLS", async () => {
+      const { error } = await a.cliente.from("recurrentes_cierres").insert({
+        recurrente_id: datosA.recurrente,
+        vencimiento: "2030-01-01",
+        estado: "confirmada",
+        movimiento_id: datosA.movimiento,
+      });
+      expect(error?.code).toBe("42501");
+    });
+
+    it("UPDATE y DELETE sobre filas ajenas afectan 0 filas", async () => {
+      const { data: actualizadas, error: errorUpdate } = await a.cliente
+        .from("recurrentes")
+        .update({ concepto: "intruso" })
+        .eq("id", datosB.recurrente)
+        .select("id");
+      expect(errorUpdate).toBeNull();
+      expect(actualizadas).toEqual([]);
+
+      const { data: borradas, error: errorDelete } = await a.cliente
+        .from("recurrentes")
+        .delete()
+        .eq("id", datosB.recurrente)
+        .select("id");
+      expect(errorDelete).toBeNull();
+      expect(borradas).toEqual([]);
+
+      const { data: cierresBorrados } = await a.cliente
+        .from("recurrentes_cierres")
+        .delete()
+        .eq("recurrente_id", datosB.recurrente)
+        .select("id");
+      expect(cierresBorrados ?? []).toEqual([]);
+
+      const { data: plantillaB } = await admin
+        .from("recurrentes")
+        .select("concepto")
+        .eq("id", datosB.recurrente)
+        .single();
+      expect(plantillaB?.concepto).toBe("Internet hogar");
+      const { data: cierresB } = await admin
+        .from("recurrentes_cierres")
+        .select("id")
+        .eq("recurrente_id", datosB.recurrente);
+      expect(cierresB).toHaveLength(2);
+    });
+
+    it("un cierre confirmado no se borra por RLS directa, ni siquiera el propio", async () => {
+      const { data } = await a.cliente
+        .from("recurrentes_cierres")
+        .delete()
+        .eq("movimiento_id", datosA.movimiento)
+        .select("id");
+      expect(data ?? []).toEqual([]);
+    });
+
+    it("confirmar_ocurrencia sobre la plantilla ajena lanza RECURRENTE_NO_ENCONTRADO", async () => {
+      const movimiento = randomUUID();
+      const { error } = await a.cliente.rpc("confirmar_ocurrencia", {
+        p_recurrente_id: datosB.recurrente,
+        p_vencimiento: "2030-01-01",
+        p_movimiento_id: movimiento,
+        p_monto: montoMovimiento(a, movimiento, 1n),
+      });
+      expect(error?.message).toBe("RECURRENTE_NO_ENCONTRADO");
+
+      const { data } = await admin.from("movimientos").select("id").eq("id", movimiento);
       expect(data).toEqual([]);
     });
   });

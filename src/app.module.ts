@@ -6,6 +6,7 @@ import { ErrorApiFilter } from "./comun/error-api.filter.js";
 import { CuentasModule } from "./cuentas/cuentas.module.js";
 import { MovimientosModule } from "./movimientos/movimientos.module.js";
 import { PerfilModule } from "./perfil/perfil.module.js";
+import { RecurrentesModule } from "./recurrentes/recurrentes.module.js";
 import { ReglasModule } from "./reglas/reglas.module.js";
 import { CifradoModule } from "./repositories/cifrado/cifrado.module.js";
 import { SupabaseModule } from "./repositories/supabase/supabase.module.js";
@@ -21,6 +22,7 @@ import { ResumenModule } from "./resumen/resumen.module.js";
     CapturaModule,
     ReglasModule,
     ResumenModule,
+    RecurrentesModule,
   ],
   providers: [
     // Guard global: toda ruta exige un token válido del proveedor (RF-03).
