@@ -17,6 +17,7 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 | Movimientos | [`movimientos.md`](movimientos.md) | SPEC 04 |
 | Captura rápida y sugerencias | [`captura.md`](captura.md) | SPEC 04 |
 | Reglas de categorización | [`reglas.md`](reglas.md) | SPEC 04 |
+| Resumen del mes | [`resumen.md`](resumen.md) | SPEC 06 |
 
 ---
 
@@ -44,7 +45,9 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 - **Fechas e instantes:** ISO 8601 en UTC (`"2026-11-18T23:46:12.750Z"`). Una
   fecha calendario sin hora va como `"YYYY-MM-DD"` y ya viene en la zona del
   usuario.
-- **Porcentajes:** `number` entero (0–100).
+- **Porcentajes:** `number` entero (0–100). **Excepción:** en
+  [`resumen.md`](resumen.md) son enteros en décimas (`274` = 27,4 %), pueden ser
+  negativos o pasar de `1000`.
 - La presentación es del cliente (REGLAS §6): formato colombiano (punto de
   miles, coma decimal), pesos sin decimales, cifras tabulares, signo «−» de los
   pasivos.
