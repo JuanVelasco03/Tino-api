@@ -1,6 +1,6 @@
 # SPEC 06 — Resumen del mes
 
-> **Estado:** Borrador
+> **Estado:** Aprobado
 > **Depende de:** SPEC 03, SPEC 04, SPEC 05
 > **Fecha:** 2026-11-21
 > **Objetivo:** Que `GET /resumen?mes=` dé las cifras de un mes (ingresos, gastos, resultado y gasto por categoría, comparados con el mes anterior), la serie de patrimonio de 12 meses y el puente del patrimonio del mes, todo calculado por la API.
