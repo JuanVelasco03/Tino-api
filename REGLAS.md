@@ -101,6 +101,9 @@ Reglas que se derivan:
 - Las variables de entorno con secretos nunca llevan prefijo público.
 - El MCP de Supabase se usa en modo solo lectura salvo al aplicar
   migraciones a propósito, y nunca apuntando a datos reales.
+- Los montos se cifran en la API. La base de datos nunca recibe ni
+  devuelve una cifra en claro. La clave (`CLAVE_MONTOS_V1`) solo vive en
+  el entorno de la API, nunca en Postgres ni en un cliente (SPEC 05).
 
 ---
 
@@ -153,13 +156,19 @@ src/
 - Las consultas analíticas (saldo corrido, jerarquía de categorías,
   series mensuales) se escriben como SQL o funciones de Postgres, no se
   resuelven trayendo filas a memoria.
+- Excepción: lo que opera sobre montos (saldo, cupo, sumas, validación de
+  importes) se calcula en `domain/` de la API, porque la base solo guarda
+  montos cifrados (§4). SQL sigue filtrando y trayendo solo las columnas
+  necesarias.
 
 ---
 
 ## 6. Datos y formato
 
-- Todo importe monetario en `NUMERIC`. **Nunca coma flotante.** Un saldo
-  que termina en `0.30000000000000004` es un defecto, no un redondeo.
+- Todo importe monetario se guarda en la base como `text` cifrado por la
+  API (§4) y en memoria es `bigint` en unidades menores. **Nunca coma
+  flotante.** Un saldo que termina en `0.30000000000000004` es un defecto,
+  no un redondeo.
 - Fechas almacenadas en UTC, presentadas en la zona del usuario.
 - Formato colombiano: punto de miles, coma decimal. Pesos sin decimales
   (`1.234.567 COP`), dólares con dos (`US$ 7.750,00`).

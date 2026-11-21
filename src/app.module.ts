@@ -7,11 +7,13 @@ import { CuentasModule } from "./cuentas/cuentas.module.js";
 import { MovimientosModule } from "./movimientos/movimientos.module.js";
 import { PerfilModule } from "./perfil/perfil.module.js";
 import { ReglasModule } from "./reglas/reglas.module.js";
+import { CifradoModule } from "./repositories/cifrado/cifrado.module.js";
 import { SupabaseModule } from "./repositories/supabase/supabase.module.js";
 
 @Module({
   imports: [
     SupabaseModule,
+    CifradoModule,
     PerfilModule,
     CuentasModule,
     MovimientosModule,

@@ -4,11 +4,14 @@
  * funciones `registrar_movimiento`, `reemplazar_movimiento` y
  * `eliminar_movimiento`: la tabla no tiene políticas de escritura.
  *
- * Montos: `numeric` viaja como texto (`::text` al leer, string al escribir) y
- * se convierte a `bigint`. Si llegara un number, falla: nunca se acepta.
+ * Montos cifrados (SPEC 05): el monto y el de cada parte se cifran con
+ * `CifradorMontos` antes de llamar a las funciones y se descifran al leer. El
+ * `id` del movimiento lo genera la API para atar el cifrado a la fila (AAD).
  */
+import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import type { UsuarioAutenticado } from "../../autenticacion/usuario.js";
 import { ErrorApi } from "../../comun/error-api.js";
 import {
   TIPOS_MOVIMIENTO,
@@ -17,12 +20,13 @@ import {
   type Ref,
   type TipoMovimiento,
 } from "../../domain/movimiento/movimiento.js";
+import { CifradorMontos, contexto } from "../cifrado/montos.js";
 import { ClienteSupabase } from "./cliente.js";
 import { desdeFuncion, errorInterno } from "./errores.js";
 import type { Database } from "./tipos.js";
 
 const COLUMNAS =
-  "id, tipo, monto::text, moneda, tasa::text, fecha, descripcion, nota, " +
+  "id, tipo, monto, moneda, tasa::text, fecha, descripcion, nota, " +
   "cuenta_origen_id, cuenta_origen_nombre, cuenta_destino_id, cuenta_destino_nombre, " +
   "categoria_id, categoria_nombre, partes, creado_en, actualizado_en";
 
@@ -48,17 +52,14 @@ type FilaDetalle = {
   actualizado_en: string | null;
 };
 
+/** Textos cifrados guardados de un movimiento: el monto y, por categoría, el de cada parte. */
+type MontosGuardados = { monto: string | null; partes: ReadonlyMap<string, string> };
+
+const SIN_GUARDADOS: MontosGuardados = { monto: null, partes: new Map() };
+
 function requerido<T>(valor: T | null, columna: string): T {
   if (valor === null) throw new Error(`movimientos_detalle.${columna} llegó nulo.`);
   return valor;
-}
-
-/** `numeric` como texto de entero. Un number o un decimal es un defecto, no un redondeo. */
-function aBigint(valor: unknown, columna: string): bigint {
-  if (typeof valor !== "string" || !/^-?\d+$/.test(valor)) {
-    throw new Error(`movimientos_detalle.${columna} no llegó como texto entero: ${String(valor)}`);
-  }
-  return BigInt(valor);
 }
 
 function aTipo(valor: string | null): TipoMovimiento {
@@ -71,45 +72,12 @@ function aRef(id: string | null, nombre: string | null): Ref | null {
   return id === null ? null : { id, nombre: requerido(nombre, "nombre") };
 }
 
-function aPartes(valor: unknown): Movimiento["partes"] {
-  if (!Array.isArray(valor)) throw new Error("movimientos_detalle.partes no es una lista.");
-  return valor.map((p: unknown) => {
-    const parte = p as { categoria_id?: unknown; categoria_nombre?: unknown; monto?: unknown };
-    if (typeof parte.categoria_id !== "string" || typeof parte.categoria_nombre !== "string") {
-      throw new Error("movimientos_detalle.partes tiene una parte mal formada.");
-    }
-    return {
-      categoria: { id: parte.categoria_id, nombre: parte.categoria_nombre },
-      monto: aBigint(parte.monto, "partes.monto"),
-    };
-  });
-}
-
 /** `numeric(18,6)` como texto sin ceros sobrantes: "1.000000" → "1", "4012.500000" → "4012.5". */
 function aTasa(valor: unknown): string {
   if (typeof valor !== "string" || !/^\d+(\.\d+)?$/.test(valor)) {
     throw new Error(`movimientos_detalle.tasa no llegó como texto decimal: ${String(valor)}`);
   }
   return valor.includes(".") ? valor.replace(/0+$/, "").replace(/\.$/, "") : valor;
-}
-
-function aMovimiento(fila: FilaDetalle): Movimiento {
-  return {
-    id: requerido(fila.id, "id"),
-    tipo: aTipo(fila.tipo),
-    monto: aBigint(fila.monto, "monto"),
-    moneda: "COP",
-    tasa: aTasa(fila.tasa),
-    fecha: requerido(fila.fecha, "fecha"),
-    descripcion: fila.descripcion,
-    nota: fila.nota,
-    cuentaOrigen: aRef(fila.cuenta_origen_id, fila.cuenta_origen_nombre),
-    cuentaDestino: aRef(fila.cuenta_destino_id, fila.cuenta_destino_nombre),
-    categoria: aRef(fila.categoria_id, fila.categoria_nombre),
-    partes: aPartes(fila.partes),
-    creadoEn: new Date(requerido(fila.creado_en, "creado_en")),
-    actualizadoEn: new Date(requerido(fila.actualizado_en, "actualizado_en")),
-  };
 }
 
 /** Traduce el error de Postgres a un código del catálogo; si no, error interno sin filtrar detalle. */
@@ -133,39 +101,120 @@ function traducir(error: PostgrestError): Error {
   return errorInterno(error);
 }
 
-/**
- * Argumentos comunes de las funciones de escritura. Los tipos generados
- * declaran los opcionales como no nulos y `numeric` como number; se envía
- * null y string, que PostgREST acepta.
- */
-function argumentos(m: MovimientoEntrada) {
-  return {
-    p_tipo: m.tipo,
-    p_monto: m.monto.toString(),
-    p_fecha: m.fecha,
-    p_descripcion: m.descripcion,
-    p_nota: m.nota,
-    p_cuenta_origen_id: m.cuentaOrigenId,
-    p_cuenta_destino_id: m.cuentaDestinoId,
-    p_categoria_id: m.categoriaId,
-    p_partes:
-      m.partes === null
-        ? null
-        : m.partes.map((p) => ({ categoria_id: p.categoriaId, monto: p.monto.toString() })),
-  };
-}
-
 @Injectable()
 export class MovimientosRepository {
-  constructor(private readonly supabase: ClienteSupabase) {}
+  constructor(
+    private readonly supabase: ClienteSupabase,
+    private readonly cifrador: CifradorMontos,
+  ) {}
 
   private cliente(token: string): SupabaseClient<Database> {
     return this.supabase.paraUsuario(token);
   }
 
+  private aPartes(usuarioId: string, movimientoId: string, valor: unknown): Movimiento["partes"] {
+    if (!Array.isArray(valor)) throw new Error("movimientos_detalle.partes no es una lista.");
+    return valor.map((p: unknown) => {
+      const parte = p as { categoria_id?: unknown; categoria_nombre?: unknown; monto?: unknown };
+      if (typeof parte.categoria_id !== "string" || typeof parte.categoria_nombre !== "string") {
+        throw new Error("movimientos_detalle.partes tiene una parte mal formada.");
+      }
+      return {
+        categoria: { id: parte.categoria_id, nombre: parte.categoria_nombre },
+        monto: this.cifrador.descifrar(
+          parte.monto,
+          contexto.parte(usuarioId, movimientoId, parte.categoria_id),
+        ),
+      };
+    });
+  }
+
+  private aMovimiento(usuarioId: string, fila: FilaDetalle): Movimiento {
+    const id = requerido(fila.id, "id");
+    return {
+      id,
+      tipo: aTipo(fila.tipo),
+      monto: this.cifrador.descifrar(fila.monto, contexto.movimiento(usuarioId, id)),
+      moneda: "COP",
+      tasa: aTasa(fila.tasa),
+      fecha: requerido(fila.fecha, "fecha"),
+      descripcion: fila.descripcion,
+      nota: fila.nota,
+      cuentaOrigen: aRef(fila.cuenta_origen_id, fila.cuenta_origen_nombre),
+      cuentaDestino: aRef(fila.cuenta_destino_id, fila.cuenta_destino_nombre),
+      categoria: aRef(fila.categoria_id, fila.categoria_nombre),
+      partes: this.aPartes(usuarioId, id, fila.partes),
+      creadoEn: new Date(requerido(fila.creado_en, "creado_en")),
+      actualizadoEn: new Date(requerido(fila.actualizado_en, "actualizado_en")),
+    };
+  }
+
+  /**
+   * Argumentos de las funciones de escritura, con los montos cifrados. Un monto
+   * igual al guardado conserva su texto: el historial compara las fotos y no
+   * debe registrar cambios falsos (RN-13). Los tipos generados declaran los
+   * opcionales como no nulos; se envía null, que PostgREST acepta.
+   */
+  private argumentos(
+    usuarioId: string,
+    id: string,
+    m: MovimientoEntrada,
+    guardados: MontosGuardados,
+  ) {
+    return {
+      p_id: id,
+      p_tipo: m.tipo,
+      p_monto: this.cifrador.cifrarSiCambia(
+        m.monto,
+        guardados.monto,
+        contexto.movimiento(usuarioId, id),
+      ),
+      p_fecha: m.fecha,
+      p_descripcion: m.descripcion,
+      p_nota: m.nota,
+      p_cuenta_origen_id: m.cuentaOrigenId,
+      p_cuenta_destino_id: m.cuentaDestinoId,
+      p_categoria_id: m.categoriaId,
+      p_partes:
+        m.partes === null
+          ? null
+          : m.partes.map((p) => ({
+              categoria_id: p.categoriaId,
+              monto: this.cifrador.cifrarSiCambia(
+                p.monto,
+                guardados.partes.get(p.categoriaId) ?? null,
+                contexto.parte(usuarioId, id, p.categoriaId),
+              ),
+            })),
+    };
+  }
+
+  /** Vacío si el movimiento no existe o es ajeno: la función de Postgres lo rechaza después. */
+  private async montosGuardados(token: string, id: string): Promise<MontosGuardados> {
+    const [movimiento, partes] = await Promise.all([
+      this.cliente(token).from("movimientos").select("monto").eq("id", id).maybeSingle(),
+      this.cliente(token)
+        .from("movimiento_partes")
+        .select("categoria_id, monto")
+        .eq("movimiento_id", id),
+    ]);
+    if (movimiento.error) throw traducir(movimiento.error);
+    if (partes.error) throw traducir(partes.error);
+    if (movimiento.data === null) return SIN_GUARDADOS;
+    const filasPartes = partes.data as unknown as { categoria_id: string; monto: string }[];
+    return {
+      monto: (movimiento.data as unknown as { monto: string }).monto,
+      partes: new Map(filasPartes.map((p) => [p.categoria_id, p.monto])),
+    };
+  }
+
   /** Movimientos con fecha entre `desde` y `hasta` (inclusive), por fecha y registro, el más reciente primero. */
-  async listarEntre(token: string, desde: string, hasta: string): Promise<Movimiento[]> {
-    const { data, error } = await this.cliente(token)
+  async listarEntre(
+    usuario: UsuarioAutenticado,
+    desde: string,
+    hasta: string,
+  ): Promise<Movimiento[]> {
+    const { data, error } = await this.cliente(usuario.token)
       .from("movimientos_detalle")
       .select(COLUMNAS)
       .gte("fecha", desde)
@@ -173,40 +222,47 @@ export class MovimientosRepository {
       .order("fecha", { ascending: false })
       .order("creado_en", { ascending: false });
     if (error) throw traducir(error);
-    return (data as unknown as FilaDetalle[]).map(aMovimiento);
+    return (data as unknown as FilaDetalle[]).map((f) => this.aMovimiento(usuario.id, f));
   }
 
   /** `null` si no existe o no es visible por RLS (movimiento ajeno). */
-  async obtener(token: string, id: string): Promise<Movimiento | null> {
-    const { data, error } = await this.cliente(token)
+  async obtener(usuario: UsuarioAutenticado, id: string): Promise<Movimiento | null> {
+    const { data, error } = await this.cliente(usuario.token)
       .from("movimientos_detalle")
       .select(COLUMNAS)
       .eq("id", id)
       .maybeSingle();
     if (error) throw traducir(error);
-    return data === null ? null : aMovimiento(data as unknown as FilaDetalle);
+    return data === null ? null : this.aMovimiento(usuario.id, data as unknown as FilaDetalle);
   }
 
-  /** Devuelve el id del movimiento creado. */
-  async registrar(token: string, entrada: MovimientoEntrada): Promise<string> {
-    const { data, error } = await this.cliente(token).rpc(
+  /** Devuelve el id del movimiento creado (lo genera la API). */
+  async registrar(usuario: UsuarioAutenticado, entrada: MovimientoEntrada): Promise<string> {
+    const args = this.argumentos(usuario.id, randomUUID(), entrada, SIN_GUARDADOS);
+    const { data, error } = await this.cliente(usuario.token).rpc(
       "registrar_movimiento",
-      argumentos(entrada) as unknown as Funciones["registrar_movimiento"]["Args"],
+      args as unknown as Funciones["registrar_movimiento"]["Args"],
     );
     if (error) throw traducir(error);
     return data;
   }
 
-  async reemplazar(token: string, id: string, entrada: MovimientoEntrada): Promise<void> {
-    const { error } = await this.cliente(token).rpc("reemplazar_movimiento", {
-      p_id: id,
-      ...argumentos(entrada),
-    } as unknown as Funciones["reemplazar_movimiento"]["Args"]);
+  async reemplazar(
+    usuario: UsuarioAutenticado,
+    id: string,
+    entrada: MovimientoEntrada,
+  ): Promise<void> {
+    const guardados = await this.montosGuardados(usuario.token, id);
+    const args = this.argumentos(usuario.id, id, entrada, guardados);
+    const { error } = await this.cliente(usuario.token).rpc(
+      "reemplazar_movimiento",
+      args as unknown as Funciones["reemplazar_movimiento"]["Args"],
+    );
     if (error) throw traducir(error);
   }
 
-  async eliminar(token: string, id: string): Promise<void> {
-    const { error } = await this.cliente(token).rpc("eliminar_movimiento", { p_id: id });
+  async eliminar(usuario: UsuarioAutenticado, id: string): Promise<void> {
+    const { error } = await this.cliente(usuario.token).rpc("eliminar_movimiento", { p_id: id });
     if (error) throw traducir(error);
   }
 }
