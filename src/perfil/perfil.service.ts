@@ -24,7 +24,7 @@ export class PerfilService {
   /** La cuenta predeterminada debe ser propia y no archivada; `null` la quita. */
   async actualizar(usuario: UsuarioAutenticado, cambios: CambiosPerfil): Promise<Perfil | null> {
     if (cambios.cuentaPredeterminadaId !== null) {
-      const cuenta = await this.cuentas.obtener(usuario.token, cambios.cuentaPredeterminadaId);
+      const cuenta = await this.cuentas.obtener(usuario, cambios.cuentaPredeterminadaId);
       if (!cuenta) throw new ErrorApi("CUENTA_INVALIDA", CAMPO_CUENTA);
       if (cuenta.archivadaEn !== null) throw new ErrorApi("CUENTA_ARCHIVADA", CAMPO_CUENTA);
     }

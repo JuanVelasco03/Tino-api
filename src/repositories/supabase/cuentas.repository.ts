@@ -2,37 +2,37 @@
  * Acceso a cuentas con el cliente del usuario: las políticas RLS de `cuentas`
  * garantizan que solo toca sus propias filas (RN-12, RN-19).
  *
- * Lee de la vista `cuentas_con_saldo` (única fuente del saldo, RN-01), escribe
- * en `cuentas` y reordena con `rpc('reordenar_cuentas')`.
- *
- * Montos: `numeric(19,0)` viaja siempre como texto (`::text` al leer, string
- * al escribir) y se convierte a `bigint`. Nunca pasa por `number`: un número
- * JSON pierde precisión por encima de 2^53.
+ * Montos cifrados (SPEC 05): `saldo_inicial` y `cupo` se guardan como texto
+ * cifrado por `CifradorMontos`; aquí se cifran al escribir y se descifran al
+ * leer. Devuelve cuentas sin saldo (`CuentaGuardada`) y los efectos de los
+ * movimientos para que el servicio calcule el saldo en el dominio (RN-01).
  */
+import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import type { UsuarioAutenticado } from "../../autenticacion/usuario.js";
 import { ErrorApi } from "../../comun/error-api.js";
 import {
   TIPOS_EN_ALCANCE,
-  type Cuenta,
+  type CuentaGuardada,
   type TipoCuentaEnAlcance,
 } from "../../domain/cuenta/cuenta.js";
 import type { Naturaleza } from "../../domain/cuenta/naturaleza.js";
+import type { EfectoMovimiento } from "../../domain/cuenta/saldo.js";
+import { CifradorMontos, contexto } from "../cifrado/montos.js";
 import { ClienteSupabase } from "./cliente.js";
 import type { Database, TablesInsert, TablesUpdate } from "./tipos.js";
 
-const COLUMNAS =
-  "id, nombre, tipo, detalle, saldo_inicial::text, saldo::text, cupo::text, posicion, archivada_en";
+const COLUMNAS = "id, nombre, tipo, detalle, saldo_inicial, cupo, posicion, archivada_en";
 
-type FilaVista = {
-  id: string | null;
-  nombre: string | null;
-  tipo: string | null;
+type Fila = {
+  id: string;
+  nombre: string;
+  tipo: string;
   detalle: string | null;
-  saldo_inicial: string | null;
-  saldo: string | null;
+  saldo_inicial: string;
   cupo: string | null;
-  posicion: number | null;
+  posicion: number;
   archivada_en: string | null;
 };
 
@@ -52,39 +52,10 @@ export type DatosEdicion = {
   cupo?: bigint;
 };
 
-/**
- * Los tipos generados declaran `numeric` como `number`. PostgREST acepta el
- * string, que es lo que se envía para no perder precisión.
- */
-type ConMontosTexto<T> = {
-  [K in keyof T]: K extends "saldo_inicial" | "cupo"
-    ? string | Extract<T[K], null | undefined>
-    : T[K];
-};
-
-function requerido<T>(valor: T | null, columna: string): T {
-  if (valor === null) throw new Error(`cuentas_con_saldo.${columna} llegó nulo.`);
-  return valor;
-}
-
-function aTipo(valor: string | null): TipoCuentaEnAlcance {
+function aTipo(valor: string): TipoCuentaEnAlcance {
   const tipo = TIPOS_EN_ALCANCE.find((t) => t === valor);
   if (!tipo) throw new Error(`Tipo de cuenta desconocido: ${valor}`);
   return tipo;
-}
-
-function aCuenta(fila: FilaVista): Cuenta {
-  return {
-    id: requerido(fila.id, "id"),
-    nombre: requerido(fila.nombre, "nombre"),
-    tipo: aTipo(fila.tipo),
-    detalle: fila.detalle,
-    saldoInicial: BigInt(requerido(fila.saldo_inicial, "saldo_inicial")),
-    saldo: BigInt(requerido(fila.saldo, "saldo")),
-    cupo: fila.cupo === null ? null : BigInt(fila.cupo),
-    posicion: requerido(fila.posicion, "posicion"),
-    archivadaEn: fila.archivada_en === null ? null : new Date(fila.archivada_en),
-  };
 }
 
 /** Traduce el error de Postgres a un código del catálogo; si no, error interno sin filtrar detalle. */
@@ -102,103 +73,201 @@ function traducir(error: PostgrestError): Error {
   return new Error(`Postgres ${error.code}: ${error.message}`);
 }
 
-function filaEdicion(datos: DatosEdicion): ConMontosTexto<TablesUpdate<"cuentas">> {
-  return {
-    ...(datos.nombre === undefined ? {} : { nombre: datos.nombre }),
-    ...(datos.tipo === undefined ? {} : { tipo: datos.tipo }),
-    ...(datos.detalle === undefined ? {} : { detalle: datos.detalle }),
-    ...(datos.saldoInicial === undefined ? {} : { saldo_inicial: datos.saldoInicial.toString() }),
-    ...(datos.cupo === undefined ? {} : { cupo: datos.cupo.toString() }),
-  };
-}
-
 @Injectable()
 export class CuentasRepository {
-  constructor(private readonly supabase: ClienteSupabase) {}
+  constructor(
+    private readonly supabase: ClienteSupabase,
+    private readonly cifrador: CifradorMontos,
+  ) {}
 
   private cliente(token: string): SupabaseClient<Database> {
     return this.supabase.paraUsuario(token);
   }
 
+  private aCuenta(usuarioId: string, fila: Fila): CuentaGuardada {
+    return {
+      id: fila.id,
+      nombre: fila.nombre,
+      tipo: aTipo(fila.tipo),
+      detalle: fila.detalle,
+      saldoInicial: this.cifrador.descifrar(
+        fila.saldo_inicial,
+        contexto.cuenta(usuarioId, fila.id, "saldo_inicial"),
+      ),
+      cupo:
+        fila.cupo === null
+          ? null
+          : this.cifrador.descifrar(fila.cupo, contexto.cuenta(usuarioId, fila.id, "cupo")),
+      posicion: fila.posicion,
+      archivadaEn: fila.archivada_en === null ? null : new Date(fila.archivada_en),
+    };
+  }
+
   /** No archivadas, en el orden del usuario. */
-  async listar(token: string): Promise<Cuenta[]> {
-    const { data, error } = await this.cliente(token)
-      .from("cuentas_con_saldo")
+  async listar(usuario: UsuarioAutenticado): Promise<CuentaGuardada[]> {
+    const { data, error } = await this.cliente(usuario.token)
+      .from("cuentas")
       .select(COLUMNAS)
       .is("archivada_en", null)
       .order("posicion")
       .order("creado_en");
     if (error) throw traducir(error);
-    return data.map(aCuenta);
+    return (data as Fila[]).map((f) => this.aCuenta(usuario.id, f));
   }
 
   /** Archivadas, la más reciente primero. */
-  async listarArchivadas(token: string): Promise<Cuenta[]> {
-    const { data, error } = await this.cliente(token)
-      .from("cuentas_con_saldo")
+  async listarArchivadas(usuario: UsuarioAutenticado): Promise<CuentaGuardada[]> {
+    const { data, error } = await this.cliente(usuario.token)
+      .from("cuentas")
       .select(COLUMNAS)
       .not("archivada_en", "is", null)
       .order("archivada_en", { ascending: false });
     if (error) throw traducir(error);
-    return data.map(aCuenta);
+    return (data as Fila[]).map((f) => this.aCuenta(usuario.id, f));
   }
 
   /** `null` si no existe o no es visible por RLS (cuenta ajena). */
-  async obtener(token: string, id: string): Promise<Cuenta | null> {
-    const { data, error } = await this.cliente(token)
-      .from("cuentas_con_saldo")
+  async obtener(usuario: UsuarioAutenticado, id: string): Promise<CuentaGuardada | null> {
+    const { data, error } = await this.cliente(usuario.token)
+      .from("cuentas")
       .select(COLUMNAS)
       .eq("id", id)
       .maybeSingle();
     if (error) throw traducir(error);
-    return data === null ? null : aCuenta(data);
+    return data === null ? null : this.aCuenta(usuario.id, data as Fila);
   }
 
-  private async obtenerExistente(token: string, id: string): Promise<Cuenta> {
-    const cuenta = await this.obtener(token, id);
+  /**
+   * Monto y cuentas de los movimientos del usuario (RLS), descifrados. Con
+   * `cuentaId`, solo los que la tocan. Trae lo mínimo: el saldo lo calcula el dominio.
+   */
+  async efectos(usuario: UsuarioAutenticado, cuentaId?: string): Promise<EfectoMovimiento[]> {
+    let consulta = this.cliente(usuario.token)
+      .from("movimientos")
+      .select("id, monto, cuenta_origen_id, cuenta_destino_id");
+    if (cuentaId !== undefined) {
+      consulta = consulta.or(`cuenta_origen_id.eq.${cuentaId},cuenta_destino_id.eq.${cuentaId}`);
+    }
+    const { data, error } = await consulta;
+    if (error) throw traducir(error);
+    return (
+      data as unknown as {
+        id: string;
+        monto: string;
+        cuenta_origen_id: string | null;
+        cuenta_destino_id: string | null;
+      }[]
+    ).map((m) => ({
+      monto: this.cifrador.descifrar(m.monto, contexto.movimiento(usuario.id, m.id)),
+      cuentaOrigenId: m.cuenta_origen_id,
+      cuentaDestinoId: m.cuenta_destino_id,
+    }));
+  }
+
+  private async obtenerExistente(usuario: UsuarioAutenticado, id: string): Promise<CuentaGuardada> {
+    const cuenta = await this.obtener(usuario, id);
     if (!cuenta) throw new ErrorApi("CUENTA_NO_ENCONTRADA");
     return cuenta;
   }
 
-  /** `posicion` la asigna el trigger `asignar_posicion`; `usuario_id`, el default `auth.uid()`. */
-  async crear(token: string, datos: DatosAlta): Promise<Cuenta> {
-    const fila: ConMontosTexto<Omit<TablesInsert<"cuentas">, "posicion">> = {
+  /**
+   * El `id` lo genera la API: el cifrado se ata a la fila (AAD). `posicion` la
+   * asigna el trigger `asignar_posicion`; `usuario_id`, el default `auth.uid()`.
+   */
+  async crear(usuario: UsuarioAutenticado, datos: DatosAlta): Promise<CuentaGuardada> {
+    const id = randomUUID();
+    const fila = {
+      id,
       nombre: datos.nombre,
       tipo: datos.tipo,
       detalle: datos.detalle,
-      saldo_inicial: datos.saldoInicial.toString(),
-      cupo: datos.cupo === null ? null : datos.cupo.toString(),
+      saldo_inicial: this.cifrador.cifrar(
+        datos.saldoInicial,
+        contexto.cuenta(usuario.id, id, "saldo_inicial"),
+      ),
+      cupo:
+        datos.cupo === null
+          ? null
+          : this.cifrador.cifrar(datos.cupo, contexto.cuenta(usuario.id, id, "cupo")),
     };
-    const { data, error } = await this.cliente(token)
+    const { error } = await this.cliente(usuario.token)
       .from("cuentas")
-      .insert(fila as unknown as TablesInsert<"cuentas">)
-      .select("id")
-      .single();
+      .insert(fila as unknown as TablesInsert<"cuentas">);
     if (error) throw traducir(error);
-    return this.obtenerExistente(token, data.id);
+    return this.obtenerExistente(usuario, id);
   }
 
   private async actualizarFila(
-    token: string,
+    usuario: UsuarioAutenticado,
     id: string,
-    fila: ConMontosTexto<TablesUpdate<"cuentas">>,
-  ): Promise<Cuenta> {
-    const { data, error } = await this.cliente(token)
+    fila: TablesUpdate<"cuentas">,
+  ): Promise<CuentaGuardada> {
+    const { data, error } = await this.cliente(usuario.token)
       .from("cuentas")
-      .update(fila as unknown as TablesUpdate<"cuentas">)
+      .update(fila)
       .eq("id", id)
       .select("id");
     if (error) throw traducir(error);
     if (data.length === 0) throw new ErrorApi("CUENTA_NO_ENCONTRADA");
-    return this.obtenerExistente(token, id);
+    return this.obtenerExistente(usuario, id);
   }
 
-  actualizar(token: string, id: string, datos: DatosEdicion): Promise<Cuenta> {
-    return this.actualizarFila(token, id, filaEdicion(datos));
+  /** Textos cifrados guardados, para no recifrar lo que no cambió. */
+  private async montosGuardados(
+    usuario: UsuarioAutenticado,
+    id: string,
+  ): Promise<{ saldo_inicial: string; cupo: string | null }> {
+    const { data, error } = await this.cliente(usuario.token)
+      .from("cuentas")
+      .select("saldo_inicial, cupo")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) throw traducir(error);
+    if (data === null) throw new ErrorApi("CUENTA_NO_ENCONTRADA");
+    return data as unknown as { saldo_inicial: string; cupo: string | null };
   }
 
-  async eliminar(token: string, id: string): Promise<void> {
-    const { data, error } = await this.cliente(token)
+  /**
+   * Un monto igual al guardado conserva su texto cifrado: el trigger de
+   * `cuentas_cambios` compara textos y no debe registrar cambios falsos (RN-13).
+   */
+  async actualizar(
+    usuario: UsuarioAutenticado,
+    id: string,
+    datos: DatosEdicion,
+  ): Promise<CuentaGuardada> {
+    const montos =
+      datos.saldoInicial === undefined && datos.cupo === undefined
+        ? null
+        : await this.montosGuardados(usuario, id);
+    const fila: TablesUpdate<"cuentas"> = {
+      ...(datos.nombre === undefined ? {} : { nombre: datos.nombre }),
+      ...(datos.tipo === undefined ? {} : { tipo: datos.tipo }),
+      ...(datos.detalle === undefined ? {} : { detalle: datos.detalle }),
+      ...(datos.saldoInicial === undefined || montos === null
+        ? {}
+        : {
+            saldo_inicial: this.cifrador.cifrarSiCambia(
+              datos.saldoInicial,
+              montos.saldo_inicial,
+              contexto.cuenta(usuario.id, id, "saldo_inicial"),
+            ),
+          }),
+      ...(datos.cupo === undefined || montos === null
+        ? {}
+        : {
+            cupo: this.cifrador.cifrarSiCambia(
+              datos.cupo,
+              montos.cupo,
+              contexto.cuenta(usuario.id, id, "cupo"),
+            ),
+          }),
+    } as TablesUpdate<"cuentas">;
+    return this.actualizarFila(usuario, id, fila);
+  }
+
+  async eliminar(usuario: UsuarioAutenticado, id: string): Promise<void> {
+    const { data, error } = await this.cliente(usuario.token)
       .from("cuentas")
       .delete()
       .eq("id", id)
@@ -209,20 +278,24 @@ export class CuentasRepository {
     if (data.length === 0) throw new ErrorApi("CUENTA_NO_ENCONTRADA");
   }
 
-  archivar(token: string, id: string): Promise<Cuenta> {
-    return this.actualizarFila(token, id, { archivada_en: new Date().toISOString() });
+  archivar(usuario: UsuarioAutenticado, id: string): Promise<CuentaGuardada> {
+    return this.actualizarFila(usuario, id, { archivada_en: new Date().toISOString() });
   }
 
   /** El nombre nuevo, si llega, se aplica en la misma sentencia; el trigger la manda al final del grupo. */
-  restaurar(token: string, id: string, nombre?: string): Promise<Cuenta> {
-    return this.actualizarFila(token, id, {
+  restaurar(usuario: UsuarioAutenticado, id: string, nombre?: string): Promise<CuentaGuardada> {
+    return this.actualizarFila(usuario, id, {
       ...(nombre === undefined ? {} : { nombre }),
       archivada_en: null,
     });
   }
 
-  async reordenar(token: string, naturaleza: Naturaleza, ids: string[]): Promise<void> {
-    const { error } = await this.cliente(token).rpc("reordenar_cuentas", {
+  async reordenar(
+    usuario: UsuarioAutenticado,
+    naturaleza: Naturaleza,
+    ids: string[],
+  ): Promise<void> {
+    const { error } = await this.cliente(usuario.token).rpc("reordenar_cuentas", {
       p_naturaleza: naturaleza,
       p_ids: ids,
     });

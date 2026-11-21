@@ -22,14 +22,14 @@ export class MovimientosService {
   ): Promise<{ mes: string; movimientos: Movimiento[] }> {
     const mesConsultado = mes ?? (await this.mesActual(usuario));
     const { desde, hasta } = rangoDelMes(mesConsultado);
-    const movimientos = await this.movimientos.listarEntre(usuario.token, desde, hasta);
+    const movimientos = await this.movimientos.listarEntre(usuario, desde, hasta);
     return { mes: mesConsultado, movimientos };
   }
 
   /** El dominio valida la forma; la función de Postgres es la garantía final. */
   async crear(usuario: UsuarioAutenticado, entrada: MovimientoEntrada): Promise<Movimiento> {
     this.validar(entrada);
-    const id = await this.movimientos.registrar(usuario.token, entrada);
+    const id = await this.movimientos.registrar(usuario, entrada);
     return this.obtenerExistente(usuario, id);
   }
 
@@ -39,12 +39,12 @@ export class MovimientosService {
     entrada: MovimientoEntrada,
   ): Promise<Movimiento> {
     this.validar(entrada);
-    await this.movimientos.reemplazar(usuario.token, id, entrada);
+    await this.movimientos.reemplazar(usuario, id, entrada);
     return this.obtenerExistente(usuario, id);
   }
 
   eliminar(usuario: UsuarioAutenticado, id: string): Promise<void> {
-    return this.movimientos.eliminar(usuario.token, id);
+    return this.movimientos.eliminar(usuario, id);
   }
 
   private validar(entrada: MovimientoEntrada): void {
@@ -58,7 +58,7 @@ export class MovimientosService {
   }
 
   private async obtenerExistente(usuario: UsuarioAutenticado, id: string): Promise<Movimiento> {
-    const movimiento = await this.movimientos.obtener(usuario.token, id);
+    const movimiento = await this.movimientos.obtener(usuario, id);
     if (!movimiento) throw new ErrorApi("MOVIMIENTO_NO_ENCONTRADO");
     return movimiento;
   }

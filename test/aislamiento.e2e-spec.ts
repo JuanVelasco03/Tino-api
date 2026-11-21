@@ -5,19 +5,24 @@
  * usuarios de prueba. Todas las aserciones usan clientes con el token de cada
  * usuario, de modo que las políticas RLS evalúan al usuario real.
  * Apunta solo a Tino dev, nunca a datos reales.
+ *
+ * SPEC 05: los montos se escriben cifrados con la clave de la API
+ * (`test/montos.ts`); la base rechaza un monto en claro. Las aserciones de
+ * aislamiento son las mismas.
  */
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { cifrador, conClave, contexto } from "./montos.js";
 
 const url = process.env.SUPABASE_URL;
 const clavePublicable = process.env.SUPABASE_PUBLISHABLE_KEY;
 const claveSecreta = process.env.SUPABASE_SECRET_KEY;
-const configurado = Boolean(url && clavePublicable && claveSecreta);
+const configurado = Boolean(url && clavePublicable && claveSecreta && conClave);
 
 if (!configurado) {
   console.warn(
-    "[aislamiento] OMITIDA: falta SUPABASE_SECRET_KEY (o SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY). " +
+    "[aislamiento] OMITIDA: falta SUPABASE_SECRET_KEY (o SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY / CLAVE_MONTOS_V1). " +
       "Defínela en .env.test.local. REGLAS §4 exige que esta prueba corra.",
   );
 }
@@ -144,9 +149,11 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
     let cuentaB: string;
 
     async function crearCuenta(u: Usuario, nombre: string): Promise<string> {
+      const id = randomUUID();
+      const saldo_inicial = cifrador().cifrar(1000n, contexto.cuenta(u.id, id, "saldo_inicial"));
       const { data, error } = await u.cliente
         .from("cuentas")
-        .insert({ nombre, tipo: "banco", saldo_inicial: 1000 })
+        .insert({ id, nombre, tipo: "banco", saldo_inicial })
         .select("id")
         .single();
       if (error || !data) throw new Error(`No se pudo crear la cuenta: ${error?.message}`);
@@ -158,16 +165,14 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
       cuentaB = await crearCuenta(b, "Cuenta B");
     });
 
-    it("cada usuario ve solo su cuenta en cuentas y en cuentas_con_saldo", async () => {
+    it("cada usuario ve solo su cuenta en cuentas", async () => {
       for (const [u, propia] of [
         [a, cuentaA],
         [b, cuentaB],
       ] as const) {
-        for (const tabla of ["cuentas", "cuentas_con_saldo"]) {
-          const { data, error } = await u.cliente.from(tabla).select("id");
-          expect(error).toBeNull();
-          expect(data).toEqual([{ id: propia }]);
-        }
+        const { data, error } = await u.cliente.from("cuentas").select("id");
+        expect(error).toBeNull();
+        expect(data).toEqual([{ id: propia }]);
       }
     });
 
@@ -198,16 +203,23 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
     });
 
     it("INSERT con usuario_id ajeno falla", async () => {
-      const { error } = await a.cliente
-        .from("cuentas")
-        .insert({ usuario_id: b.id, nombre: "Ajena", tipo: "efectivo" });
+      const id = randomUUID();
+      const { error } = await a.cliente.from("cuentas").insert({
+        id,
+        usuario_id: b.id,
+        nombre: "Ajena",
+        tipo: "efectivo",
+        saldo_inicial: cifrador().cifrar(0n, contexto.cuenta(b.id, id, "saldo_inicial")),
+      });
       expect(error).not.toBeNull();
     });
 
     it("cambiar el saldo inicial propio deja 1 fila en cuentas_cambios, invisible para el otro", async () => {
       const { error } = await a.cliente
         .from("cuentas")
-        .update({ saldo_inicial: 2000 })
+        .update({
+          saldo_inicial: cifrador().cifrar(2000n, contexto.cuenta(a.id, cuentaA, "saldo_inicial")),
+        })
         .eq("id", cuentaA);
       expect(error).toBeNull();
 
@@ -225,12 +237,13 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
     });
 
     it("INSERT directo en cuentas_cambios falla", async () => {
+      const ctx = contexto.cuenta(a.id, cuentaA, "saldo_inicial");
       const { error } = await a.cliente.from("cuentas_cambios").insert({
         cuenta_id: cuentaA,
         usuario_id: a.id,
         campo: "saldo_inicial",
-        valor_anterior: 0,
-        valor_nuevo: 1,
+        valor_anterior: cifrador().cifrar(0n, ctx),
+        valor_nuevo: cifrador().cifrar(1n, ctx),
       });
       expect(error).not.toBeNull();
     });
@@ -266,18 +279,37 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
       return data.id as string;
     }
 
+    /** Monto de un movimiento y de sus partes, cifrados como lo hace la API. */
+    const monto = (u: Usuario, id: string, valor: bigint) =>
+      cifrador().cifrar(valor, contexto.movimiento(u.id, id));
+    const parte = (u: Usuario, id: string, categoriaId: string, valor: bigint) => ({
+      categoria_id: categoriaId,
+      monto: cifrador().cifrar(valor, contexto.parte(u.id, id, categoriaId)),
+    });
+
     async function preparar(u: Usuario, nombreCuenta: string, concepto: string): Promise<Datos> {
+      const idCuenta = randomUUID();
       const { data: cuenta, error } = await u.cliente
         .from("cuentas")
-        .insert({ nombre: nombreCuenta, tipo: "banco", saldo_inicial: 100000 })
+        .insert({
+          id: idCuenta,
+          nombre: nombreCuenta,
+          tipo: "banco",
+          saldo_inicial: cifrador().cifrar(
+            100000n,
+            contexto.cuenta(u.id, idCuenta, "saldo_inicial"),
+          ),
+        })
         .select("id")
         .single();
       if (error || !cuenta) throw new Error(`No se pudo crear la cuenta: ${error?.message}`);
       const comida = await categoria(u, "Comida");
 
+      const idMov = randomUUID();
       const { data: movimiento, error: errorMov } = await u.cliente.rpc("registrar_movimiento", {
+        p_id: idMov,
         p_tipo: "gasto",
-        p_monto: "15000",
+        p_monto: monto(u, idMov, 15000n),
         p_fecha: hoy,
         p_descripcion: concepto,
         p_nota: null,
@@ -285,8 +317,8 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
         p_cuenta_destino_id: null,
         p_categoria_id: null,
         p_partes: [
-          { categoria_id: comida, monto: "10000" },
-          { categoria_id: await categoria(u, "Mercado"), monto: "5000" },
+          parte(u, idMov, comida, 10000n),
+          parte(u, idMov, await categoria(u, "Mercado"), 5000n),
         ],
       });
       if (errorMov) throw new Error(`No se pudo registrar: ${errorMov.message}`);
@@ -295,7 +327,7 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
       const { error: errorEdicion } = await u.cliente.rpc("reemplazar_movimiento", {
         p_id: movimiento,
         p_tipo: "gasto",
-        p_monto: "15000",
+        p_monto: monto(u, idMov, 15000n),
         p_fecha: hoy,
         p_descripcion: `${concepto} editado`,
         p_nota: null,
@@ -306,9 +338,11 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
       });
       if (errorEdicion) throw new Error(`No se pudo editar: ${errorEdicion.message}`);
       // Y otro dividido, para que haya partes visibles.
+      const idDividido = randomUUID();
       const { error: errorDividido } = await u.cliente.rpc("registrar_movimiento", {
+        p_id: idDividido,
         p_tipo: "gasto",
-        p_monto: "3000",
+        p_monto: monto(u, idDividido, 3000n),
         p_fecha: hoy,
         p_descripcion: concepto,
         p_nota: null,
@@ -316,8 +350,8 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
         p_cuenta_destino_id: null,
         p_categoria_id: null,
         p_partes: [
-          { categoria_id: comida, monto: "1000" },
-          { categoria_id: await categoria(u, "Ocio"), monto: "2000" },
+          parte(u, idDividido, comida, 1000n),
+          parte(u, idDividido, await categoria(u, "Ocio"), 2000n),
         ],
       });
       if (errorDividido) throw new Error(`No se pudo dividir: ${errorDividido.message}`);
@@ -369,10 +403,12 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
     });
 
     it("INSERT, UPDATE y DELETE directos en movimientos y movimiento_partes no cambian nada", async () => {
+      const idNuevo = randomUUID();
       const { error: insercion } = await a.cliente.from("movimientos").insert({
+        id: idNuevo,
         usuario_id: a.id,
         tipo: "gasto",
-        monto: 1,
+        monto: monto(a, idNuevo, 1n),
         fecha: hoy,
         cuenta_origen_id: datosA.cuenta,
       });
@@ -381,38 +417,41 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
       const { error: insercionParte } = await a.cliente.from("movimiento_partes").insert({
         movimiento_id: datosA.movimiento,
         usuario_id: a.id,
-        categoria_id: datosA.comida,
-        monto: 1,
+        ...parte(a, datosA.movimiento, datosA.comida, 1n),
       });
       expect(insercionParte).not.toBeNull();
 
       for (const tabla of ["movimientos", "movimiento_partes"]) {
         const { data: actualizadas } = await a.cliente
           .from(tabla)
-          .update({ monto: 1 })
-          .neq("monto", 0)
+          .update({ monto: monto(a, datosA.movimiento, 1n) })
+          .neq("monto", "")
           .select("id");
         expect(actualizadas ?? []).toEqual([]);
         const { data: borradas } = await a.cliente
           .from(tabla)
           .delete()
-          .neq("monto", 0)
+          .neq("monto", "")
           .select("id");
         expect(borradas ?? []).toEqual([]);
       }
 
       const { data: real } = await admin
         .from("movimientos")
-        .select("monto::text")
+        .select("monto")
         .eq("id", datosA.movimiento)
         .single();
-      expect(real?.monto).toBe("15000");
+      expect(cifrador().descifrar(real?.monto, contexto.movimiento(a.id, datosA.movimiento))).toBe(
+        15000n,
+      );
     });
 
     it("registrar_movimiento con la cuenta o la categoría ajena falla", async () => {
+      const idNuevo = randomUUID();
       const base = {
+        p_id: idNuevo,
         p_tipo: "gasto",
-        p_monto: "1000",
+        p_monto: monto(a, idNuevo, 1000n),
         p_fecha: hoy,
         p_descripcion: null,
         p_nota: null,
@@ -437,10 +476,7 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
         ...base,
         p_cuenta_origen_id: datosA.cuenta,
         p_categoria_id: null,
-        p_partes: [
-          { categoria_id: datosA.comida, monto: "500" },
-          { categoria_id: datosB.comida, monto: "500" },
-        ],
+        p_partes: [parte(a, idNuevo, datosA.comida, 500n), parte(a, idNuevo, datosB.comida, 500n)],
       });
       expect(conParteAjena.error?.message).toBe("CATEGORIA_INVALIDA:partes");
     });
@@ -449,7 +485,7 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
       const reemplazo = await a.cliente.rpc("reemplazar_movimiento", {
         p_id: datosB.movimiento,
         p_tipo: "gasto",
-        p_monto: "1",
+        p_monto: monto(a, datosB.movimiento, 1n),
         p_fecha: hoy,
         p_descripcion: null,
         p_nota: null,
@@ -465,18 +501,27 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
 
       const { data: sigue } = await admin
         .from("movimientos")
-        .select("monto::text")
+        .select("monto")
         .eq("id", datosB.movimiento)
         .single();
-      expect(sigue?.monto).toBe("15000");
+      expect(cifrador().descifrar(sigue?.monto, contexto.movimiento(b.id, datosB.movimiento))).toBe(
+        15000n,
+      );
     });
 
-    it("gastos_del_dia y conceptos_frecuentes solo cuentan lo propio", async () => {
-      const { data: total } = await a.cliente
-        .rpc("gastos_del_dia", { p_fecha: hoy })
-        .select("total::text")
-        .single();
-      expect(total).toEqual({ total: "18000" });
+    it("los gastos del día y conceptos_frecuentes solo cuentan lo propio", async () => {
+      const { data: gastos, error } = await a.cliente
+        .from("movimientos")
+        .select("id, usuario_id, monto")
+        .eq("fecha", hoy)
+        .eq("tipo", "gasto");
+      expect(error).toBeNull();
+      expect(gastos!.every((g) => g.usuario_id === a.id)).toBe(true);
+      const total = gastos!.reduce(
+        (suma, g) => suma + cifrador().descifrar(g.monto, contexto.movimiento(a.id, g.id)),
+        0n,
+      );
+      expect(total).toBe(18000n);
 
       const { data: frecuentes } = await a.cliente.rpc("conceptos_frecuentes", {
         p_desde: "2000-01-01",

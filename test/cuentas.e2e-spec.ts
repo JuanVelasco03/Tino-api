@@ -17,6 +17,7 @@ import { AppModule } from "../src/app.module.js";
 import { CATALOGO, crearPipeValidacion, type CodigoError } from "../src/comun/error-api.js";
 import type { CuentaDto, ListaCuentasDto } from "../src/cuentas/dto.js";
 import { fechaLocal } from "../src/domain/fecha/fecha-local.js";
+import { cifrador, contexto } from "./montos.js";
 
 const url = process.env.SUPABASE_URL;
 const clavePublicable = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -284,7 +285,10 @@ describe("/cuentas", () => {
         });
         const { error } = await u.cliente
           .from("cuentas")
-          .update({ tipo: "tarjeta_credito", cupo: 1000 })
+          .update({
+            tipo: "tarjeta_credito",
+            cupo: cifrador().cifrar(1000n, contexto.cuenta(u.id, cuenta.id, "cupo")),
+          })
           .eq("id", cuenta.id);
         expect(error?.message).toBe("CAMBIO_DE_NATURALEZA");
       });
@@ -306,12 +310,17 @@ describe("/cuentas", () => {
 
         const { data, error } = await u.cliente
           .from("cuentas_cambios")
-          .select("campo, valor_anterior::text, valor_nuevo::text")
+          .select("campo, valor_anterior, valor_nuevo")
           .eq("cuenta_id", cuenta.id);
         expect(error).toBeNull();
-        expect(data).toEqual([
-          { campo: "saldo_inicial", valor_anterior: "100", valor_nuevo: "250" },
-        ]);
+        const ctx = contexto.cuenta(u.id, cuenta.id, "saldo_inicial");
+        expect(
+          (data as { campo: string; valor_anterior: string; valor_nuevo: string }[]).map((f) => ({
+            campo: f.campo,
+            valor_anterior: cifrador().descifrar(f.valor_anterior, ctx),
+            valor_nuevo: cifrador().descifrar(f.valor_nuevo, ctx),
+          })),
+        ).toEqual([{ campo: "saldo_inicial", valor_anterior: 100n, valor_nuevo: 250n }]);
       });
 
       it("PATCH sin campos → SIN_CAMBIOS", async () => {

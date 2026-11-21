@@ -41,12 +41,12 @@ export type Database = {
           actualizado_en: string;
           archivada_en: string | null;
           creado_en: string;
-          cupo: number | null;
+          cupo: string | null;
           detalle: string | null;
           id: string;
           nombre: string;
           posicion: number;
-          saldo_inicial: number;
+          saldo_inicial: string;
           tipo: string;
           usuario_id: string;
         };
@@ -54,12 +54,12 @@ export type Database = {
           actualizado_en?: string;
           archivada_en?: string | null;
           creado_en?: string;
-          cupo?: number | null;
+          cupo?: string | null;
           detalle?: string | null;
           id?: string;
           nombre: string;
           posicion: number;
-          saldo_inicial?: number;
+          saldo_inicial: string;
           tipo: string;
           usuario_id?: string;
         };
@@ -67,12 +67,12 @@ export type Database = {
           actualizado_en?: string;
           archivada_en?: string | null;
           creado_en?: string;
-          cupo?: number | null;
+          cupo?: string | null;
           detalle?: string | null;
           id?: string;
           nombre?: string;
           posicion?: number;
-          saldo_inicial?: number;
+          saldo_inicial?: string;
           tipo?: string;
           usuario_id?: string;
         };
@@ -85,8 +85,8 @@ export type Database = {
           cuenta_id: string;
           id: string;
           usuario_id: string;
-          valor_anterior: number;
-          valor_nuevo: number;
+          valor_anterior: string;
+          valor_nuevo: string;
         };
         Insert: {
           cambiado_en?: string;
@@ -94,8 +94,8 @@ export type Database = {
           cuenta_id: string;
           id?: string;
           usuario_id: string;
-          valor_anterior: number;
-          valor_nuevo: number;
+          valor_anterior: string;
+          valor_nuevo: string;
         };
         Update: {
           cambiado_en?: string;
@@ -103,8 +103,8 @@ export type Database = {
           cuenta_id?: string;
           id?: string;
           usuario_id?: string;
-          valor_anterior?: number;
-          valor_nuevo?: number;
+          valor_anterior?: string;
+          valor_nuevo?: string;
         };
         Relationships: [
           {
@@ -114,34 +114,27 @@ export type Database = {
             referencedRelation: "cuentas";
             referencedColumns: ["id"];
           },
-          {
-            foreignKeyName: "cuentas_cambios_cuenta_id_fkey";
-            columns: ["cuenta_id"];
-            isOneToOne: false;
-            referencedRelation: "cuentas_con_saldo";
-            referencedColumns: ["id"];
-          },
         ];
       };
       movimiento_partes: {
         Row: {
           categoria_id: string;
           id: string;
-          monto: number;
+          monto: string;
           movimiento_id: string;
           usuario_id: string;
         };
         Insert: {
           categoria_id: string;
           id?: string;
-          monto: number;
+          monto: string;
           movimiento_id: string;
           usuario_id: string;
         };
         Update: {
           categoria_id?: string;
           id?: string;
-          monto?: number;
+          monto?: string;
           movimiento_id?: string;
           usuario_id?: string;
         };
@@ -180,7 +173,7 @@ export type Database = {
           fecha: string;
           id: string;
           moneda: string;
-          monto: number;
+          monto: string;
           nota: string | null;
           tasa: number;
           tipo: string;
@@ -196,7 +189,7 @@ export type Database = {
           fecha: string;
           id?: string;
           moneda?: string;
-          monto: number;
+          monto: string;
           nota?: string | null;
           tasa?: number;
           tipo: string;
@@ -212,7 +205,7 @@ export type Database = {
           fecha?: string;
           id?: string;
           moneda?: string;
-          monto?: number;
+          monto?: string;
           nota?: string | null;
           tasa?: number;
           tipo?: string;
@@ -234,24 +227,10 @@ export type Database = {
             referencedColumns: ["usuario_id", "id"];
           },
           {
-            foreignKeyName: "movimientos_cuenta_destino_fkey";
-            columns: ["usuario_id", "cuenta_destino_id"];
-            isOneToOne: false;
-            referencedRelation: "cuentas_con_saldo";
-            referencedColumns: ["usuario_id", "id"];
-          },
-          {
             foreignKeyName: "movimientos_cuenta_origen_fkey";
             columns: ["usuario_id", "cuenta_origen_id"];
             isOneToOne: false;
             referencedRelation: "cuentas";
-            referencedColumns: ["usuario_id", "id"];
-          },
-          {
-            foreignKeyName: "movimientos_cuenta_origen_fkey";
-            columns: ["usuario_id", "cuenta_origen_id"];
-            isOneToOne: false;
-            referencedRelation: "cuentas_con_saldo";
             referencedColumns: ["usuario_id", "id"];
           },
         ];
@@ -325,13 +304,6 @@ export type Database = {
             referencedRelation: "cuentas";
             referencedColumns: ["usuario_id", "id"];
           },
-          {
-            foreignKeyName: "perfiles_cuenta_predeterminada_fkey";
-            columns: ["id", "cuenta_predeterminada_id"];
-            isOneToOne: false;
-            referencedRelation: "cuentas_con_saldo";
-            referencedColumns: ["usuario_id", "id"];
-          },
         ];
       };
       reglas_categoria: {
@@ -371,51 +343,6 @@ export type Database = {
       };
     };
     Views: {
-      cuentas_con_saldo: {
-        Row: {
-          actualizado_en: string | null;
-          archivada_en: string | null;
-          creado_en: string | null;
-          cupo: number | null;
-          detalle: string | null;
-          id: string | null;
-          nombre: string | null;
-          posicion: number | null;
-          saldo: number | null;
-          saldo_inicial: number | null;
-          tipo: string | null;
-          usuario_id: string | null;
-        };
-        Insert: {
-          actualizado_en?: string | null;
-          archivada_en?: string | null;
-          creado_en?: string | null;
-          cupo?: number | null;
-          detalle?: string | null;
-          id?: string | null;
-          nombre?: string | null;
-          posicion?: number | null;
-          saldo?: never;
-          saldo_inicial?: number | null;
-          tipo?: string | null;
-          usuario_id?: string | null;
-        };
-        Update: {
-          actualizado_en?: string | null;
-          archivada_en?: string | null;
-          creado_en?: string | null;
-          cupo?: number | null;
-          detalle?: string | null;
-          id?: string | null;
-          nombre?: string | null;
-          posicion?: number | null;
-          saldo?: never;
-          saldo_inicial?: number | null;
-          tipo?: string | null;
-          usuario_id?: string | null;
-        };
-        Relationships: [];
-      };
       movimientos_detalle: {
         Row: {
           actualizado_en: string | null;
@@ -430,7 +357,7 @@ export type Database = {
           fecha: string | null;
           id: string | null;
           moneda: string | null;
-          monto: number | null;
+          monto: string | null;
           nota: string | null;
           partes: Json | null;
           tasa: number | null;
@@ -453,24 +380,10 @@ export type Database = {
             referencedColumns: ["usuario_id", "id"];
           },
           {
-            foreignKeyName: "movimientos_cuenta_destino_fkey";
-            columns: ["usuario_id", "cuenta_destino_id"];
-            isOneToOne: false;
-            referencedRelation: "cuentas_con_saldo";
-            referencedColumns: ["usuario_id", "id"];
-          },
-          {
             foreignKeyName: "movimientos_cuenta_origen_fkey";
             columns: ["usuario_id", "cuenta_origen_id"];
             isOneToOne: false;
             referencedRelation: "cuentas";
-            referencedColumns: ["usuario_id", "id"];
-          },
-          {
-            foreignKeyName: "movimientos_cuenta_origen_fkey";
-            columns: ["usuario_id", "cuenta_origen_id"];
-            isOneToOne: false;
-            referencedRelation: "cuentas_con_saldo";
             referencedColumns: ["usuario_id", "id"];
           },
         ];
@@ -500,12 +413,6 @@ export type Database = {
       };
       eliminar_movimiento: { Args: { p_id: string }; Returns: undefined };
       foto_movimiento: { Args: { p_id: string }; Returns: Json };
-      gastos_del_dia: {
-        Args: { p_fecha: string };
-        Returns: {
-          total: number;
-        }[];
-      };
       insertar_semilla: { Args: { p_usuario: string }; Returns: undefined };
       naturaleza_de: { Args: { tipo: string }; Returns: string };
       partes_o_vacio: { Args: { p_partes: Json }; Returns: Json };
@@ -517,7 +424,7 @@ export type Database = {
           p_descripcion: string;
           p_fecha: string;
           p_id: string;
-          p_monto: number;
+          p_monto: string;
           p_nota: string;
           p_partes: Json;
           p_tipo: string;
@@ -531,7 +438,8 @@ export type Database = {
           p_cuenta_origen_id: string;
           p_descripcion: string;
           p_fecha: string;
-          p_monto: number;
+          p_id: string;
+          p_monto: string;
           p_nota: string;
           p_partes: Json;
           p_tipo: string;
@@ -547,7 +455,6 @@ export type Database = {
           p_categoria_id: string;
           p_cuenta_destino_id: string;
           p_cuenta_origen_id: string;
-          p_monto: number;
           p_partes: Json;
           p_tipo: string;
           p_usuario: string;

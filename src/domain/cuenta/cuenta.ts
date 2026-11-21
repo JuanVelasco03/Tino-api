@@ -23,6 +23,9 @@ export type Cuenta = {
   archivadaEn: Date | null;
 };
 
+/** Cuenta tal como se guarda: sin saldo, que se calcula con `conSaldos` (RN-01). */
+export type CuentaGuardada = Omit<Cuenta, "saldo">;
+
 export type GrupoCuentas = { total: bigint; cuentas: Cuenta[] };
 
 export type ResumenCuentas = {

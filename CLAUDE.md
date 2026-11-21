@@ -22,6 +22,7 @@ Ante conflicto entre una propuesta y una regla, gana la regla.
 
 - NestJS 12, ESM: las importaciones relativas terminan en `.js`. Consulta la doc de Nest antes de usar APIs nuevas.
 - Dinero: `bigint` en unidades menores (COP = pesos, USD = centavos). Nunca `number` con decimales.
+- Montos cifrados (SPEC 05): en la BD son `text` cifrado. Los repositorios cifran y descifran con `CifradorMontos` (`src/repositories/cifrado/`); saldos y sumas se calculan en `src/domain/`. Requiere `CLAVE_MONTOS_V1`.
 - Solo `src/repositories/supabase/cliente.ts` construye clientes de Supabase. Los de datos portan el token del usuario (`paraUsuario`). Nunca `service_role` en peticiones: la API no arranca si la encuentra en el entorno.
 - Toda ruta pasa por `AutenticacionGuard` (global). El usuario llega al controller con `@Usuario()`.
 - `src/domain/` no importa Nest ni Supabase.

@@ -5,6 +5,7 @@ import { proponerCategoria, type ReglaEvaluable } from "../domain/categorizacion
 import { resolverCuentaPredeterminada } from "../domain/cuenta/predeterminada.js";
 import { fechaLocal } from "../domain/fecha/fecha-local.js";
 import { restarDias } from "../domain/fecha/mes.js";
+import { sumarGastos } from "../domain/movimiento/gasto-del-dia.js";
 import type { TipoMovimiento } from "../domain/movimiento/movimiento.js";
 import { ZONA_HORARIA_POR_DEFECTO } from "../domain/perfil/perfil.js";
 import { normalizarTexto } from "../domain/texto/normalizar.js";
@@ -39,9 +40,9 @@ export class CapturaService {
     const fechaHoy = fechaLocal(new Date(), perfil?.zonaHoraria ?? ZONA_HORARIA_POR_DEFECTO);
 
     const [cuentas, categorias, gastosHoy, frecuentes] = await Promise.all([
-      this.cuentas.listar(usuario.token),
+      this.cuentas.listar(usuario),
       this.categorias.listar(usuario.token),
-      this.captura.gastosDelDia(usuario.token, fechaHoy),
+      this.captura.gastosDelDia(usuario, fechaHoy),
       this.captura.conceptosFrecuentes(
         usuario.token,
         restarDias(fechaHoy, DIAS_FRECUENTES - 1),
@@ -62,7 +63,7 @@ export class CapturaService {
         gasto: categorias.filter((c) => c.tipo === "gasto").map(aCategoriaDto),
         ingreso: categorias.filter((c) => c.tipo === "ingreso").map(aCategoriaDto),
       },
-      gastosHoy: gastosHoy.toString(),
+      gastosHoy: sumarGastos(gastosHoy).toString(),
       conceptosFrecuentes: {
         gasto: deTipo("gasto"),
         ingreso: deTipo("ingreso"),

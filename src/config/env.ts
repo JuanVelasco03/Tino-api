@@ -11,6 +11,8 @@ export type Env = {
   puerto: number;
   /** Origen permitido por CORS (la app web). */
   origenWeb: string;
+  /** Clave maestra de los montos, versión 1: 32 bytes (SPEC 05, REGLAS §4). */
+  claveMontosV1: Buffer;
 };
 
 function requerida(nombre: string): string {
@@ -32,6 +34,21 @@ function urlValida(nombre: string, valor: string): string {
   return valor;
 }
 
+/**
+ * 32 bytes exactos en base64. El error nombra la variable, nunca muestra su valor.
+ * `Buffer.from(…, "base64")` ignora caracteres inválidos: por eso se compara la ida y vuelta.
+ */
+function claveDe32Bytes(nombre: string, valor: string): Buffer {
+  const clave = Buffer.from(valor, "base64");
+  if (clave.length !== 32 || clave.toString("base64") !== valor) {
+    throw new Error(
+      `La variable de entorno ${nombre} debe ser una clave de 32 bytes en base64 ` +
+        "(genera una con: node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\").",
+    );
+  }
+  return clave;
+}
+
 let cache: Env | null = null;
 
 export function leerEnv(): Env {
@@ -40,6 +57,7 @@ export function leerEnv(): Env {
     supabasePublishableKey: requerida("SUPABASE_PUBLISHABLE_KEY"),
     puerto: Number(process.env.PUERTO ?? 4000),
     origenWeb: urlValida("ORIGEN_WEB", process.env.ORIGEN_WEB ?? "http://localhost:3000"),
+    claveMontosV1: claveDe32Bytes("CLAVE_MONTOS_V1", requerida("CLAVE_MONTOS_V1")),
   };
   return cache;
 }
