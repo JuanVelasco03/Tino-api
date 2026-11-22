@@ -17,6 +17,7 @@ import { AppModule } from "../src/app.module.js";
 import { CATALOGO, crearPipeValidacion, type CodigoError } from "../src/comun/error-api.js";
 import type { CuentaDto } from "../src/cuentas/dto.js";
 import { TrmFuente } from "../src/repositories/datos-gov/trm.fuente.js";
+import { PreciosFuente } from "../src/repositories/twelve-data/precios.fuente.js";
 
 const url = process.env.SUPABASE_URL;
 const clavePublicable = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -40,12 +41,26 @@ const FUENTE_TRM_SIN_RED = {
   obtenerRango: () => Promise.resolve(null),
 };
 
+/**
+ * Fuente de precios apagada, como sin `TWELVE_DATA_API_KEY`: ninguna e2e sale
+ * a Twelve Data (SPEC 11). Quien la necesite pasa la suya.
+ */
+const FUENTE_PRECIOS_APAGADA = {
+  disponible: false,
+  buscar: () => Promise.resolve(null),
+  actuales: (activos: readonly unknown[]) => Promise.resolve(activos.map(() => null)),
+  historico: (pedidos: readonly unknown[]) => Promise.resolve(pedidos.map(() => null)),
+};
+
 export async function crearApp(reemplazos: Reemplazo[] = []): Promise<INestApplication<App>> {
   const constructor = Test.createTestingModule({ imports: [AppModule] });
-  const conFuente = reemplazos.some((r) => r.proveedor === TrmFuente);
-  const todos = conFuente
-    ? reemplazos
-    : [...reemplazos, { proveedor: TrmFuente, valor: FUENTE_TRM_SIN_RED }];
+  const todos = [...reemplazos];
+  if (!reemplazos.some((r) => r.proveedor === TrmFuente)) {
+    todos.push({ proveedor: TrmFuente, valor: FUENTE_TRM_SIN_RED });
+  }
+  if (!reemplazos.some((r) => r.proveedor === PreciosFuente)) {
+    todos.push({ proveedor: PreciosFuente, valor: FUENTE_PRECIOS_APAGADA });
+  }
   for (const { proveedor, valor } of todos) {
     constructor.overrideProvider(proveedor).useValue(valor);
   }

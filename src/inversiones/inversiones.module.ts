@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { CuentasRepository } from "../repositories/supabase/cuentas.repository.js";
 import { InversionesRepository } from "../repositories/supabase/inversiones.repository.js";
 import { PerfilesRepository } from "../repositories/supabase/perfiles.repository.js";
+import { PreciosModule } from "../precios/precios.module.js";
 import { TrmModule } from "../trm/trm.module.js";
 import { InversionesController } from "./inversiones.controller.js";
 import { InversionesService } from "./inversiones.service.js";
@@ -13,7 +14,7 @@ import { LineaDeTiempoService } from "./linea-de-tiempo.service.js";
  * tiempo y valoran las inversiones.
  */
 @Module({
-  imports: [TrmModule],
+  imports: [TrmModule, PreciosModule],
   controllers: [InversionesController],
   providers: [
     InversionesService,

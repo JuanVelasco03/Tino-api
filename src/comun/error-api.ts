@@ -297,6 +297,21 @@ export const CATALOGO = {
     campo: "tipo",
   },
   MONEDA_FIJA: { estado: 422, mensaje: "La moneda de una cuenta no cambia.", campo: "moneda" },
+  // Precios automáticos (SPEC 11)
+  ACTIVO_NO_CUBIERTO: {
+    estado: 422,
+    mensaje: "El proveedor de precios no cubre este activo. Actualiza su precio a mano.",
+    campo: "cotizacion",
+  },
+  PROVEEDOR_NO_DISPONIBLE: {
+    estado: 503,
+    mensaje: "El proveedor de precios no responde. Intenta más tarde.",
+  },
+  PRECIO_AUTOMATICO: {
+    estado: 422,
+    mensaje: "Este activo tiene precio automático. Pásalo a manual para fijar su precio.",
+    campo: "precio",
+  },
   NO_AUTENTICADO: { estado: 401, mensaje: "Inicia sesión para continuar." },
   ERROR_INTERNO: {
     estado: 500,

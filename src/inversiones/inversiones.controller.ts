@@ -6,15 +6,23 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   Put,
   Query,
 } from "@nestjs/common";
 import { Usuario, type UsuarioAutenticado } from "../autenticacion/usuario.js";
-import type { InversionDetalleDto, InversionesDto, OperacionesDto } from "./dto.js";
+import type {
+  BusquedaActivoDto,
+  InversionDetalleDto,
+  InversionesDto,
+  OperacionesDto,
+} from "./dto.js";
 import {
   consultaActivo,
+  consultaSimbolo,
   cuerpoCambioOperacion,
+  cuerpoCotizacion,
   cuerpoInversion,
   cuerpoOperacion,
   cuerpoPrecio,
@@ -22,6 +30,7 @@ import {
   idInversion,
   idOperacion,
   type CuerpoCambioOperacion,
+  type CuerpoCotizacion,
   type CuerpoInversion,
   type CuerpoOperacion,
   type CuerpoPrecio,
@@ -89,6 +98,27 @@ export class InversionesController {
     @Param("operacionId", { schema: idOperacion }) operacionId: string,
   ): Promise<void> {
     return this.inversiones.eliminarOperacion(usuario, id, operacionId);
+  }
+
+  /** Cobertura de un símbolo (SPEC 11). El cliente la llama al salir del campo, no en cada tecla. */
+  @Get(":id/activos/buscar")
+  buscarActivo(
+    @Usuario() usuario: UsuarioAutenticado,
+    @Param("id", { schema: idInversion }) id: string,
+    @Query("simbolo", { schema: consultaSimbolo }) simbolo: string,
+  ): Promise<BusquedaActivoDto> {
+    return this.inversiones.buscarActivo(usuario, id, simbolo);
+  }
+
+  /** Modo de cotización del activo (SPEC 11). */
+  @Patch(":id/activos/:activoId")
+  cambiarCotizacion(
+    @Usuario() usuario: UsuarioAutenticado,
+    @Param("id", { schema: idInversion }) id: string,
+    @Param("activoId", { schema: idActivo }) activoId: string,
+    @Body({ schema: cuerpoCotizacion }) cuerpo: CuerpoCotizacion,
+  ): Promise<InversionDetalleDto> {
+    return this.inversiones.cambiarCotizacion(usuario, id, activoId, cuerpo);
   }
 
   @Post(":id/activos/:activoId/precios")

@@ -24,6 +24,10 @@
  * su historial e `inversion_precios`; `crear_inversion` y
  * `registrar_operacion` (security definer) atacadas con datos ajenos; permisos
  * de columna de las operaciones y moneda fija.
+ *
+ * SPEC 11: precios `cierre` e `intradia`, UPDATE de la cotización del activo
+ * y del intradía, `guardar_precios_automaticos` (security invoker) atacada
+ * con datos ajenos, permisos de columna del activo y su `check` de modo.
  */
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -1218,6 +1222,244 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
         .select("precio_cent")
         .in("activo_id", [datosA.activo, datosB.activo]);
       expect(reales).toHaveLength(4);
+    });
+  });
+
+  describe("precios automáticos (SPEC 11)", () => {
+    type Datos = { activo: string; consultadoEn: string };
+    let datosA: Datos;
+    let datosB: Datos;
+    const hoy = new Date().toISOString().slice(0, 10);
+    const ayer = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+    const haceUnMinuto = new Date(Date.now() - 60_000).toISOString();
+
+    async function preparar(u: Usuario, nombre: string): Promise<Datos> {
+      const cuenta = randomUUID();
+      const activo = randomUUID();
+      const operacion = randomUUID();
+      const { error } = await u.cliente.rpc("crear_inversion", {
+        p_cuenta_id: cuenta,
+        p_nombre: nombre,
+        p_moneda: "USD",
+        p_saldo_inicial: cifrador().cifrar(0n, contexto.cuenta(u.id, cuenta, "saldo_inicial")),
+        p_posiciones: [
+          {
+            operacion_id: operacion,
+            activo_id: activo,
+            simbolo: "BTC",
+            nombre: "Bitcoin US Dollar",
+            cotizacion: "automatica",
+            clase: "cripto",
+            simbolo_fuente: "BTC/USD",
+            cantidad: cifrador().cifrar(
+              100000000n,
+              contexto.operacion(u.id, operacion, "cantidad"),
+            ),
+            monto: cifrador().cifrar(7000000n, contexto.operacion(u.id, operacion, "monto")),
+            fecha: ayer,
+            precio_cent: 7000000,
+          },
+        ],
+      });
+      if (error) throw new Error(`No se pudo crear la inversión: ${error.message}`);
+
+      const { error: errorPrecios } = await u.cliente.rpc("guardar_precios_automaticos", {
+        p_precios: [
+          {
+            activo_id: activo,
+            precio_cent: 7100000,
+            fecha: ayer,
+            origen: "cierre",
+            cotizado_en: haceUnMinuto,
+          },
+          {
+            activo_id: activo,
+            precio_cent: 7140000,
+            fecha: hoy,
+            origen: "intradia",
+            cotizado_en: haceUnMinuto,
+          },
+        ],
+        p_consultados: [activo],
+      });
+      if (errorPrecios)
+        throw new Error(`No se pudieron guardar los precios: ${errorPrecios.message}`);
+
+      const { data } = await admin
+        .from("inversion_activos")
+        .select("consultado_en")
+        .eq("id", activo)
+        .single();
+      return { activo, consultadoEn: (data as { consultado_en: string }).consultado_en };
+    }
+
+    beforeAll(async () => {
+      datosA = await preparar(a, "Auto A");
+      datosB = await preparar(b, "Auto B");
+    });
+
+    it("nadie ve los precios cierre ni intradia ajenos", async () => {
+      for (const [u, otro, propio] of [
+        [a, b, datosA],
+        [b, a, datosB],
+      ] as const) {
+        const { data, error } = await u.cliente
+          .from("inversion_precios")
+          .select("usuario_id, activo_id, origen")
+          .in("origen", ["cierre", "intradia"]);
+        expect(error).toBeNull();
+        expect(data!.filter((f) => f.activo_id === propio.activo)).toHaveLength(2);
+        expect(data!.some((f) => f.usuario_id === otro.id)).toBe(false);
+      }
+    });
+
+    it("UPDATE de la cotización del activo ajeno o del intradía ajeno afecta 0 filas", async () => {
+      const { data: activos, error: errorActivo } = await a.cliente
+        .from("inversion_activos")
+        .update({ cotizacion: "manual", simbolo_fuente: null })
+        .eq("id", datosB.activo)
+        .select("id");
+      expect(errorActivo).toBeNull();
+      expect(activos).toEqual([]);
+
+      const { data: precios, error: errorPrecio } = await a.cliente
+        .from("inversion_precios")
+        .update({ precio_cent: 1 })
+        .eq("activo_id", datosB.activo)
+        .eq("origen", "intradia")
+        .select("id");
+      expect(errorPrecio).toBeNull();
+      expect(precios).toEqual([]);
+
+      const { data: activo } = await admin
+        .from("inversion_activos")
+        .select("cotizacion, simbolo_fuente")
+        .eq("id", datosB.activo)
+        .single();
+      expect(activo).toEqual({ cotizacion: "automatica", simbolo_fuente: "BTC/USD" });
+
+      const { data: intradia } = await admin
+        .from("inversion_precios")
+        .select("precio_cent")
+        .eq("activo_id", datosB.activo)
+        .eq("origen", "intradia")
+        .single();
+      expect(intradia).toEqual({ precio_cent: 7140000 });
+    });
+
+    it("guardar_precios_automaticos no cambia nada ajeno", async () => {
+      const { error: errorPrecio } = await a.cliente.rpc("guardar_precios_automaticos", {
+        p_precios: [
+          {
+            activo_id: datosB.activo,
+            precio_cent: 1,
+            fecha: "2020-01-02",
+            origen: "cierre",
+            cotizado_en: haceUnMinuto,
+          },
+        ],
+        p_consultados: [],
+      });
+      expect(errorPrecio?.code).toBe("23503");
+
+      const { error: errorConsulta } = await a.cliente.rpc("guardar_precios_automaticos", {
+        p_precios: [],
+        p_consultados: [datosB.activo],
+      });
+      expect(errorConsulta).toBeNull();
+
+      const { data: precios } = await admin
+        .from("inversion_precios")
+        .select("id")
+        .eq("activo_id", datosB.activo)
+        .eq("precio_cent", 1);
+      expect(precios).toEqual([]);
+
+      const { data: activo } = await admin
+        .from("inversion_activos")
+        .select("consultado_en")
+        .eq("id", datosB.activo)
+        .single();
+      expect(activo).toEqual({ consultado_en: datosB.consultadoEn });
+    });
+
+    it("guardar_precios_automaticos rechaza el origen manual", async () => {
+      const { error } = await a.cliente.rpc("guardar_precios_automaticos", {
+        p_precios: [
+          {
+            activo_id: datosA.activo,
+            precio_cent: 1,
+            fecha: hoy,
+            origen: "manual",
+            cotizado_en: haceUnMinuto,
+          },
+        ],
+        p_consultados: [],
+      });
+      expect(error?.message).toBe("ENTRADA_INVALIDA:origen");
+    });
+
+    it("UPDATE de un precio cierre o manual propio afecta 0 filas; el intradía propio sí cambia", async () => {
+      for (const origen of ["cierre", "manual"]) {
+        const { data, error } = await a.cliente
+          .from("inversion_precios")
+          .update({ precio_cent: 1 })
+          .eq("activo_id", datosA.activo)
+          .eq("origen", origen)
+          .select("id");
+        expect(error).toBeNull();
+        expect(data).toEqual([]);
+      }
+
+      const { data: intradia, error: errorIntradia } = await a.cliente
+        .from("inversion_precios")
+        .update({ precio_cent: 7150000 })
+        .eq("activo_id", datosA.activo)
+        .eq("origen", "intradia")
+        .select("precio_cent");
+      expect(errorIntradia).toBeNull();
+      expect(intradia).toEqual([{ precio_cent: 7150000 }]);
+
+      const { data: reales } = await admin
+        .from("inversion_precios")
+        .select("origen, precio_cent")
+        .eq("activo_id", datosA.activo)
+        .in("origen", ["cierre", "manual"])
+        .order("origen");
+      expect(reales).toEqual([
+        { origen: "cierre", precio_cent: 7100000 },
+        { origen: "manual", precio_cent: 7000000 },
+      ]);
+    });
+
+    it("UPDATE de simbolo o nombre del activo falla por permisos", async () => {
+      const { error: errorSimbolo } = await a.cliente
+        .from("inversion_activos")
+        .update({ simbolo: "ETH" })
+        .eq("id", datosA.activo);
+      expect(errorSimbolo?.code).toBe("42501");
+
+      const { error: errorNombre } = await a.cliente
+        .from("inversion_activos")
+        .update({ nombre: "Otro" })
+        .eq("id", datosA.activo);
+      expect(errorNombre?.code).toBe("42501");
+
+      const { data: real } = await admin
+        .from("inversion_activos")
+        .select("simbolo, nombre")
+        .eq("id", datosA.activo)
+        .single();
+      expect(real).toEqual({ simbolo: "BTC", nombre: "Bitcoin US Dollar" });
+    });
+
+    it("un activo automatica sin simbolo_fuente viola el check", async () => {
+      const { error } = await a.cliente
+        .from("inversion_activos")
+        .update({ simbolo_fuente: null })
+        .eq("id", datosA.activo);
+      expect(error?.code).toBe("23514");
+      expect(error?.message).toContain("inversion_activos_cotizacion_check");
     });
   });
 });

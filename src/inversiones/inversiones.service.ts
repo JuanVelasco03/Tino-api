@@ -6,7 +6,9 @@ import { fechaLocal } from "../domain/fecha/fecha-local.js";
 import { parsearCantidad } from "../domain/inversion/cantidad.js";
 import { TIPO_INVERSION, type ClaseOperacion, type Moneda } from "../domain/inversion/inversion.js";
 import { gananciasRealizadas } from "../domain/inversion/posiciones.js";
+import { modoDeCobertura } from "../domain/precio/cobertura.js";
 import {
+  nombreDeActivo,
   normalizarSimbolo,
   primerPrecio,
   validarAltaInversion,
@@ -20,21 +22,32 @@ import { ZONA_HORARIA_POR_DEFECTO } from "../domain/perfil/perfil.js";
 import type { InversionPatrimonio } from "../domain/resumen/resumen.js";
 import { CuentasRepository } from "../repositories/supabase/cuentas.repository.js";
 import {
+  COTIZACION_MANUAL,
   InversionesRepository,
+  type CambioCotizacion,
+  type CotizacionNueva,
   type CuentaInversion,
 } from "../repositories/supabase/inversiones.repository.js";
 import { PerfilesRepository } from "../repositories/supabase/perfiles.repository.js";
+import { PreciosService } from "../precios/precios.service.js";
 import { aTrmDto } from "../trm/dto.js";
 import { TrmService } from "../trm/trm.service.js";
 import {
+  aBusquedaActivoDto,
   aInversionDetalleDto,
   aInversionResumenDto,
   aOperacionDto,
+  type BusquedaActivoDto,
   type InversionDetalleDto,
   type InversionesDto,
   type OperacionesDto,
 } from "./dto.js";
-import type { CuerpoCambioOperacion, CuerpoInversion, CuerpoOperacion } from "./esquemas.js";
+import type {
+  CuerpoCambioOperacion,
+  CuerpoCotizacion,
+  CuerpoInversion,
+  CuerpoOperacion,
+} from "./esquemas.js";
 import { LineaDeTiempoService } from "./linea-de-tiempo.service.js";
 
 function lanzar(error: ErrorInversion | null): void {
@@ -51,6 +64,7 @@ export class InversionesService {
     private readonly perfiles: PerfilesRepository,
     private readonly trm: TrmService,
     private readonly lineaDeTiempo: LineaDeTiempoService,
+    private readonly precios: PreciosService,
   ) {}
 
   /** Inversiones no archivadas valoradas a hoy, con la TRM de hoy (N-38: aunque no haya ninguna). */
@@ -58,11 +72,12 @@ export class InversionesService {
     const fechaHoy = await this.hoy(usuario);
     const cuentas = await this.inversiones.listarCuentas(usuario);
     const ids = cuentas.map((c) => c.id);
-    const [datos, efectos, trm] = await Promise.all([
+    const [leidos, efectos, trm] = await Promise.all([
       this.inversiones.datos(usuario, ids),
       ids.length === 0 ? Promise.resolve([]) : this.cuentas.efectos(usuario),
       this.trm.en(usuario.token, fechaHoy),
     ]);
+    const datos = await this.refrescados(usuario, ids, leidos);
     const hastaHoy = efectos.filter((m) => m.fecha <= fechaHoy);
     return {
       fechaHoy,
@@ -74,17 +89,25 @@ export class InversionesService {
     };
   }
 
-  /** Detalle valorado a hoy; también de una inversión archivada. */
-  async detalle(usuario: UsuarioAutenticado, id: string): Promise<InversionDetalleDto> {
+  /**
+   * Detalle valorado a hoy; también de una inversión archivada. Antes trae
+   * los precios automáticos vencidos (SPEC 11), salvo con `refrescar: false`.
+   */
+  async detalle(
+    usuario: UsuarioAutenticado,
+    id: string,
+    refrescar = true,
+  ): Promise<InversionDetalleDto> {
     const [cuenta, fechaHoy] = await Promise.all([
       this.obtenerCuenta(usuario, id),
       this.hoy(usuario),
     ]);
-    const [datos, efectos, trm] = await Promise.all([
+    const [leidos, efectos, trm] = await Promise.all([
       this.inversiones.datos(usuario, [id]),
       this.cuentas.efectos(usuario, id),
       this.trm.en(usuario.token, fechaHoy),
     ]);
+    const datos = refrescar ? await this.refrescados(usuario, [id], leidos) : leidos;
     const hastaHoy = efectos.filter((m) => m.fecha <= fechaHoy);
     return aInversionDetalleDto(
       cuenta,
@@ -97,29 +120,91 @@ export class InversionesService {
   /**
    * Crea la cuenta con su efectivo inicial y lo que ya se tenía (operaciones
    * `inicial`, que no mueven efectivo). El primer precio de cada activo es su
-   * costo unitario.
+   * costo unitario. Cada activo nace automático si el proveedor lo cubre en la
+   * moneda de la cuenta; entonces su nombre es opcional (SPEC 11).
    */
   async crear(usuario: UsuarioAutenticado, cuerpo: CuerpoInversion): Promise<InversionDetalleDto> {
     const fechaHoy = await this.hoy(usuario);
     const posiciones = cuerpo.posiciones.map((p) => ({ ...p, fecha: p.fecha ?? fechaHoy }));
     lanzar(validarAltaInversion({ ...cuerpo, posiciones }, fechaHoy));
+    const moneda = cuerpo.moneda as Moneda;
+    const nuevas = [];
+    for (const [i, p] of posiciones.entries()) {
+      const simbolo = normalizarSimbolo(p.simbolo)!;
+      const { cobertura } = await this.precios.buscar(simbolo, moneda);
+      const nombre = nombreDeActivo(p.nombre, cobertura);
+      if (nombre === null) throw new ErrorApi("NOMBRE_REQUERIDO", `posiciones.${i}.nombre`);
+      const cantidad = parsearCantidad(p.cantidad)!;
+      nuevas.push({
+        simbolo,
+        nombre,
+        cotizacion: modoDeCobertura(cobertura),
+        cantidad,
+        monto: p.costo,
+        fecha: p.fecha,
+        precio: primerPrecio(p.costo, cantidad)!,
+      });
+    }
     const id = await this.inversiones.crear(usuario, {
       nombre: cuerpo.nombre.trim(),
-      moneda: cuerpo.moneda as Moneda,
+      moneda,
       efectivoInicial: cuerpo.efectivoInicial,
-      posiciones: posiciones.map((p) => {
-        const cantidad = parsearCantidad(p.cantidad)!;
-        return {
-          simbolo: normalizarSimbolo(p.simbolo)!,
-          nombre: p.nombre.trim(),
-          cantidad,
-          monto: p.costo,
-          fecha: p.fecha,
-          precio: primerPrecio(p.costo, cantidad)!,
-        };
-      }),
+      posiciones: nuevas,
     });
     return this.detalle(usuario, id);
+  }
+
+  /**
+   * Cobertura de `simbolo` en la moneda de la inversión (SPEC 11, N-48). Gasta
+   * un crédito del proveedor. Si la fuente está apagada o falla, no cubierto y
+   * `proveedorDisponible: false`.
+   */
+  async buscarActivo(
+    usuario: UsuarioAutenticado,
+    id: string,
+    texto: string,
+  ): Promise<BusquedaActivoDto> {
+    const cuenta = await this.obtenerCuenta(usuario, id);
+    const simbolo = normalizarSimbolo(texto);
+    if (simbolo === null) throw new ErrorApi("SIMBOLO_INVALIDO");
+    const { cobertura, proveedorDisponible } = await this.precios.buscar(simbolo, cuenta.moneda);
+    return aBusquedaActivoDto(simbolo, cobertura, proveedorDisponible);
+  }
+
+  /**
+   * Cambia el modo de cotización del activo (SPEC 11). A automático exige que
+   * el proveedor lo cubra en la moneda de la cuenta y deja la consulta para la
+   * siguiente lectura: el detalle sale sin refrescar. A manual, el precio
+   * vigente sigue siendo el último que hubo.
+   */
+  async cambiarCotizacion(
+    usuario: UsuarioAutenticado,
+    id: string,
+    activoId: string,
+    cuerpo: CuerpoCotizacion,
+  ): Promise<InversionDetalleDto> {
+    const cuenta = await this.obtenerNoArchivada(usuario, id);
+    const activos = await this.inversiones.activos(usuario, [cuenta.id]);
+    const activo = activos.find((a) => a.id === activoId);
+    if (!activo) throw new ErrorApi("ACTIVO_NO_ENCONTRADO");
+    if (activo.cotizacion === cuerpo.cotizacion) throw new ErrorApi("SIN_CAMBIOS");
+
+    if (cuerpo.cotizacion === "automatica") {
+      const { cobertura, proveedorDisponible } = await this.precios.buscar(
+        activo.simbolo,
+        cuenta.moneda,
+      );
+      if (!proveedorDisponible) throw new ErrorApi("PROVEEDOR_NO_DISPONIBLE");
+      if (!cobertura.cubierto) throw new ErrorApi("ACTIVO_NO_CUBIERTO");
+      await this.actualizarCotizacion(usuario, id, activoId, {
+        cotizacion: "automatica",
+        clase: cobertura.clase,
+        simboloFuente: cobertura.simboloFuente,
+      });
+    } else {
+      await this.actualizarCotizacion(usuario, id, activoId, { cotizacion: "manual" });
+    }
+    return this.detalle(usuario, id, false);
   }
 
   /** Operaciones de la cuenta, por fecha desc; con `activoId`, solo las de ese activo (N-63). */
@@ -169,7 +254,6 @@ export class InversionesService {
     const activos = await this.inversiones.activos(usuario, [cuenta.id]);
     const existente = activos.find((a) => a.simbolo === simbolo);
     if (!existente && clase === "venta") throw new ErrorApi("ACTIVO_NO_ENCONTRADO", "simbolo");
-    if (!existente && entrada.nombre === null) throw new ErrorApi("NOMBRE_REQUERIDO", "nombre");
 
     const nueva = {
       id: "nueva",
@@ -181,15 +265,26 @@ export class InversionesService {
     };
     await this.lineaDeTiempo.validar(usuario, id, { operacion: { id: nueva.id, nueva } });
 
+    // Un activo nuevo nace automático si el proveedor lo cubre; entonces su nombre es opcional.
+    let nombre = entrada.nombre?.trim() ?? null;
+    let cotizacion: CotizacionNueva = COTIZACION_MANUAL;
+    if (!existente) {
+      const { cobertura } = await this.precios.buscar(simbolo, cuenta.moneda);
+      nombre = nombreDeActivo(entrada.nombre, cobertura);
+      if (nombre === null) throw new ErrorApi("NOMBRE_REQUERIDO", "nombre");
+      cotizacion = modoDeCobertura(cobertura);
+    }
+
     await this.inversiones.registrarOperacion(usuario, {
       cuentaId: id,
       clase,
       simbolo,
-      nombre: entrada.nombre?.trim() ?? null,
+      nombre,
       cantidad,
       monto: entrada.monto,
       fecha: entrada.fecha,
       precio: primerPrecio(entrada.monto, cantidad)!,
+      cotizacion,
     });
     return this.detalle(usuario, id);
   }
@@ -229,7 +324,11 @@ export class InversionesService {
     await this.inversiones.eliminarOperacion(usuario, id, operacionId);
   }
 
-  /** Precio manual con la fecha de hoy. No borra el anterior (N-53). */
+  /**
+   * Precio manual con la fecha de hoy. No borra el anterior (N-53). Solo en un
+   * activo manual: en uno automático, el siguiente refresco lo pisaría
+   * (PRECIO_AUTOMATICO, SPEC 11).
+   */
   async registrarPrecio(
     usuario: UsuarioAutenticado,
     id: string,
@@ -242,9 +341,9 @@ export class InversionesService {
       this.hoy(usuario),
     ]);
     const activos = await this.inversiones.activos(usuario, [cuenta.id]);
-    if (!activos.some((a) => a.id === activoId)) {
-      throw new ErrorApi("ACTIVO_NO_ENCONTRADO", "simbolo");
-    }
+    const activo = activos.find((a) => a.id === activoId);
+    if (!activo) throw new ErrorApi("ACTIVO_NO_ENCONTRADO", "simbolo");
+    if (activo.cotizacion === "automatica") throw new ErrorApi("PRECIO_AUTOMATICO");
     await this.inversiones.insertarPrecio(usuario, activoId, precio, fechaHoy);
     return this.detalle(usuario, id);
   }
@@ -261,6 +360,30 @@ export class InversionesService {
       efectos,
     );
     return valorarInversion({ saldoCuenta, ...(datos ?? SIN_DATOS) }, fecha);
+  }
+
+  /**
+   * Refresca los precios automáticos vencidos de las inversiones `ids`
+   * (SPEC 11). Si hubo consulta, relee activos, operaciones y precios.
+   */
+  private async refrescados(
+    usuario: UsuarioAutenticado,
+    ids: readonly string[],
+    leidos: Map<string, InversionPatrimonio>,
+  ): Promise<Map<string, InversionPatrimonio>> {
+    const activos = [...leidos.values()].flatMap((d) => d.activos);
+    const consulto = await this.precios.refrescar(usuario, activos);
+    return consulto ? this.inversiones.datos(usuario, ids) : leidos;
+  }
+
+  private async actualizarCotizacion(
+    usuario: UsuarioAutenticado,
+    id: string,
+    activoId: string,
+    cambio: CambioCotizacion,
+  ): Promise<void> {
+    const actualizado = await this.inversiones.actualizarCotizacion(usuario, id, activoId, cambio);
+    if (!actualizado) throw new ErrorApi("ACTIVO_NO_ENCONTRADO");
   }
 
   private async hoy(usuario: UsuarioAutenticado): Promise<string> {

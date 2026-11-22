@@ -1,6 +1,6 @@
 # SPEC 11 — Precios automáticos de inversiones
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 09, SPEC 10
 > **Fecha:** 2026-11-22
 > **Objetivo:** Que la API traiga sola de Twelve Data el precio de los activos que el proveedor cubre (cierre en acciones y ETF, intradía en cripto), lo guarde en la caché de precios del usuario y complete los cierres pasados que pide el patrimonio, con el precio manual como modo de respaldo.

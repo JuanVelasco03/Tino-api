@@ -10,16 +10,18 @@ import { TIPO_INVERSION } from "../domain/inversion/inversion.js";
 import {
   cambioDelMes,
   fechasConTrm,
+  fechasDePrecios,
   inicio,
   patrimonioEn,
   seriePatrimonio,
   variacionDeSerie,
 } from "../domain/resumen/patrimonio.js";
-import type { DatosPatrimonio } from "../domain/resumen/resumen.js";
+import type { DatosPatrimonio, InversionPatrimonio } from "../domain/resumen/resumen.js";
 import { CategoriasRepository } from "../repositories/supabase/categorias.repository.js";
 import { InversionesRepository } from "../repositories/supabase/inversiones.repository.js";
 import { PerfilesRepository } from "../repositories/supabase/perfiles.repository.js";
 import { ResumenRepository } from "../repositories/supabase/resumen.repository.js";
+import { PreciosService } from "../precios/precios.service.js";
 import { TrmService } from "../trm/trm.service.js";
 import {
   aCambioDelMesDto,
@@ -38,6 +40,7 @@ export class ResumenService {
     private readonly perfiles: PerfilesRepository,
     private readonly inversiones: InversionesRepository,
     private readonly trm: TrmService,
+    private readonly precios: PreciosService,
   ) {}
 
   /**
@@ -45,7 +48,9 @@ export class ResumenService {
    * perfil. Un mes posterior al actual → MES_FUTURO. Todo lo calcula el dominio.
    * Las inversiones aportan su valor de mercado en COP; la TRM de todas las
    * fechas que hacen falta sale de una sola llamada a `enFechas`, y solo si
-   * hay alguna inversión USD (SPEC 10).
+   * hay alguna inversión USD (SPEC 10). Antes se refrescan los precios
+   * automáticos vencidos y se completan los cierres pasados de las fechas del
+   * patrimonio (SPEC 11); si algo cambió, se releen.
    */
   async obtener(usuario: UsuarioAutenticado, mes: string | undefined): Promise<ResumenDto> {
     const perfil = await this.perfiles.leerPropio(usuario.token);
@@ -74,7 +79,7 @@ export class ResumenService {
       })),
       cambios: lectura.cambios.map((c) => ({ ...c, fecha: fechaLocal(c.cambiadoEn, zona) })),
       movimientos: lectura.movimientos,
-      inversiones: await this.inversiones.datos(usuario, idsInversion),
+      inversiones: await this.inversionesConPrecios(usuario, idsInversion, fechaHoy, mesMostrado),
     };
     const fechasTrm = fechasConTrm(base, fechaHoy, mesMostrado);
     const trm =
@@ -113,5 +118,23 @@ export class ResumenService {
       },
       cambioDelMes: aCambioDelMesDto(cambioDelMes(datos, mesMostrado, delMes.resultado.actual)),
     };
+  }
+
+  /** Datos de las inversiones con los precios automáticos al día y los cierres pasados completos. */
+  private async inversionesConPrecios(
+    usuario: UsuarioAutenticado,
+    ids: readonly string[],
+    fechaHoy: string,
+    mes: string,
+  ): Promise<Map<string, InversionPatrimonio>> {
+    let datos = await this.inversiones.datos(usuario, ids);
+    const activos = [...datos.values()].flatMap((d) => d.activos);
+    if (await this.precios.refrescar(usuario, activos)) {
+      datos = await this.inversiones.datos(usuario, ids);
+    }
+    if (await this.precios.completarHistorico(usuario, datos, fechasDePrecios(fechaHoy, mes))) {
+      datos = await this.inversiones.datos(usuario, ids);
+    }
+    return datos;
   }
 }

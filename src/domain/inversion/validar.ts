@@ -7,6 +7,7 @@ import type { EfectoMovimiento } from "../cuenta/saldo.js";
 import { esFechaValida } from "../fecha/mes.js";
 import { parsearCantidad } from "./cantidad.js";
 import type { TipoMovimiento } from "../movimiento/movimiento.js";
+import type { Cobertura } from "../precio/precio.js";
 import {
   TIPO_INVERSION,
   UNIDAD,
@@ -129,6 +130,18 @@ export function validarCambioOperacion(c: CambioOperacion, hoy: string): ErrorIn
   return null;
 }
 
+/**
+ * Nombre de un activo nuevo (SPEC 11): con el del usuario gana el del
+ * usuario; sin él, el del proveedor si cubre el símbolo, recortado a 80. Sin
+ * ninguno, `null` (NOMBRE_REQUERIDO).
+ */
+export function nombreDeActivo(nombre: string | null, cobertura: Cobertura): string | null {
+  if (nombre !== null && nombre.trim() !== "") return nombre.trim();
+  if (!cobertura.cubierto) return null;
+  const delProveedor = cobertura.nombre.trim().slice(0, NOMBRE_ACTIVO_MAXIMO).trim();
+  return delProveedor === "" ? null : delProveedor;
+}
+
 /** Precio manual entero > 0. */
 export function validarPrecio(precio: bigint): ErrorInversion | null {
   return precio > 0n ? null : error("PRECIO_INVALIDO", "precio");
@@ -140,7 +153,8 @@ export function validarPrecio(precio: bigint): ErrorInversion | null {
 
 export type PosicionInicialEntrada = {
   simbolo: string;
-  nombre: string;
+  /** Opcional si el proveedor cubre el símbolo (SPEC 11): lo decide `nombreDeActivo`. */
+  nombre: string | null;
   cantidad: string;
   costo: bigint;
   fecha: string;

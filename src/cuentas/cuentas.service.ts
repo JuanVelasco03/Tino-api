@@ -20,6 +20,7 @@ import {
 } from "../repositories/supabase/cuentas.repository.js";
 import { InversionesRepository } from "../repositories/supabase/inversiones.repository.js";
 import { PerfilesRepository } from "../repositories/supabase/perfiles.repository.js";
+import { PreciosService } from "../precios/precios.service.js";
 import { TrmService } from "../trm/trm.service.js";
 
 const SIN_TRM: TrmResuelta = { trm: null, desactualizada: false };
@@ -33,6 +34,7 @@ export class CuentasService {
     private readonly inversiones: InversionesRepository,
     private readonly trm: TrmService,
     private readonly lineaDeTiempo: LineaDeTiempoService,
+    private readonly precios: PreciosService,
   ) {}
 
   /**
@@ -55,7 +57,7 @@ export class CuentasService {
       tipo: p.tipo,
       saldo: calcularSaldo(p, efectos),
     }));
-    const conValor = await this.aMercado(usuario, conSaldos(cuentas, efectos), trm);
+    const conValor = await this.aMercado(usuario, conSaldos(cuentas, efectos), trm, true);
     return { resumen: agruparCuentas(conValor, saldosPrestamos), fechaSaldos, trm };
   }
 
@@ -64,7 +66,7 @@ export class CuentasService {
       this.cuentas.listarArchivadas(usuario),
       this.cuentas.efectos(usuario),
     ]);
-    return this.aMercado(usuario, conSaldos(cuentas, efectos));
+    return this.aMercado(usuario, conSaldos(cuentas, efectos), undefined, true);
   }
 
   async crear(usuario: UsuarioAutenticado, datos: DatosAlta): Promise<Cuenta> {
@@ -126,23 +128,30 @@ export class CuentasService {
    * en COP con la TRM de hoy (0 si es USD y no hay TRM) y el bloque
    * `inversion` en su moneda. Sin fecha: todos los movimientos y operaciones,
    * y el último precio (RN-01). Las demás cuentas no cambian. Sin `trm`, se
-   * consulta solo si hay alguna inversión USD.
+   * consulta solo si hay alguna inversión USD. Con `refrescar` (listas), antes
+   * se traen los precios automáticos vencidos y se releen (SPEC 11).
    */
   private async aMercado(
     usuario: UsuarioAutenticado,
     cuentas: Cuenta[],
     trm?: TrmResuelta,
+    refrescar = false,
   ): Promise<Cuenta[]> {
     const inversiones = cuentas.filter((c) => c.tipo === TIPO_INVERSION);
     if (inversiones.length === 0) return cuentas;
     const necesitaTrm = trm === undefined && inversiones.some((c) => c.moneda === "USD");
-    const [datos, trmResuelta] = await Promise.all([
-      this.inversiones.datos(
-        usuario,
-        inversiones.map((c) => c.id),
-      ),
+    const ids = inversiones.map((c) => c.id);
+    const [leidos, trmResuelta] = await Promise.all([
+      this.inversiones.datos(usuario, ids),
       necesitaTrm ? this.hoy(usuario).then((h) => this.trm.en(usuario.token, h)) : (trm ?? SIN_TRM),
     ]);
+    let datos = leidos;
+    if (refrescar) {
+      const activos = [...leidos.values()].flatMap((d) => d.activos);
+      if (await this.precios.refrescar(usuario, activos)) {
+        datos = await this.inversiones.datos(usuario, ids);
+      }
+    }
     const trmCent = trmResuelta.trm?.valorCent ?? null;
     return cuentas.map((c) => {
       if (c.tipo !== TIPO_INVERSION) return c;

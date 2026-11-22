@@ -13,6 +13,11 @@ export type Env = {
   origenWeb: string;
   /** Clave maestra de los montos, versión 1: 32 bytes (SPEC 05, REGLAS §4). */
   claveMontosV1: Buffer;
+  /**
+   * Clave de Twelve Data (SPEC 11), opcional. Sin ella los precios quedan
+   * manuales. Secreta: sin prefijo público y nunca en un log.
+   */
+  twelveDataApiKey: string | null;
 };
 
 function requerida(nombre: string): string {
@@ -23,6 +28,11 @@ function requerida(nombre: string): string {
     );
   }
   return valor.trim();
+}
+
+function opcional(nombre: string): string | null {
+  const valor = process.env[nombre]?.trim();
+  return valor === undefined || valor === "" ? null : valor;
 }
 
 function urlValida(nombre: string, valor: string): string {
@@ -58,6 +68,7 @@ export function leerEnv(): Env {
     puerto: Number(process.env.PUERTO ?? 4000),
     origenWeb: urlValida("ORIGEN_WEB", process.env.ORIGEN_WEB ?? "http://localhost:3000"),
     claveMontosV1: claveDe32Bytes("CLAVE_MONTOS_V1", requerida("CLAVE_MONTOS_V1")),
+    twelveDataApiKey: opcional("TWELVE_DATA_API_KEY"),
   };
   return cache;
 }

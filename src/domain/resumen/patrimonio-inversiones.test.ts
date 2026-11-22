@@ -5,6 +5,7 @@ import {
   aportesEn,
   cambioDelMes,
   fechasConTrm,
+  fechasDePrecios,
   flujosEntre,
   patrimonioEn,
   revaluacionEntre,
@@ -244,5 +245,22 @@ describe("fechasConTrm", () => {
     expect(fechas).toContain("2026-09-30");
     expect(fechas).toContain("2025-12-31");
     expect(fechas).toEqual([...new Set(fechas)].toSorted());
+  });
+});
+
+describe("fechasDePrecios (SPEC 11)", () => {
+  it("cierres de la serie y del puente, y hoy, sin fechas futuras", () => {
+    const fechas = fechasDePrecios("2026-11-22", "2026-11");
+    expect(fechas).toHaveLength(12);
+    expect(fechas[0]).toBe("2025-12-31");
+    expect(fechas.at(-2)).toBe("2026-10-31");
+    expect(fechas.at(-1)).toBe("2026-11-22");
+    expect(fechas).not.toContain("2026-11-30");
+  });
+
+  it("un mes pasado suma su cierre y el del mes anterior", () => {
+    const fechas = fechasDePrecios("2026-11-22", "2025-06");
+    expect(fechas).toContain("2025-05-31");
+    expect(fechas).toContain("2025-06-30");
   });
 });

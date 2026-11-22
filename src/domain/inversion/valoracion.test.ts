@@ -126,3 +126,39 @@ describe("valorarInversion", () => {
     });
   });
 });
+
+describe("precioVigente en un activo automático (SPEC 11)", () => {
+  const precios = [
+    // Costo unitario con que nació el activo, hoy.
+    precio("VOO", 50_000n, "2026-11-22", "2026-11-22T15:00:00Z"),
+    precio("VOO", 56_240n, "2026-11-21", "2026-11-21T21:00:00Z", "cierre"),
+    precio("VOO", 55_900n, "2026-11-20", "2026-11-20T21:00:00Z", "cierre"),
+  ];
+
+  it("el último cierre del proveedor le gana al costo con fecha posterior", () => {
+    const r = precioVigente("activo-VOO", precios, "2026-11-22", "automatica")!;
+    expect(r.vigente).toMatchObject({ precio: 56_240n, origen: "cierre" });
+    expect(r.anterior).toMatchObject({ precio: 55_900n, origen: "cierre" });
+  });
+
+  it("sin precio del proveedor ≤ F, la regla de siempre con el manual", () => {
+    const comprado = [
+      precio("VOO", 50_000n, "2026-11-15", "2026-11-15T15:00:00Z"),
+      precio("VOO", 56_240n, "2026-11-21", "2026-11-21T21:00:00Z", "cierre"),
+    ];
+    expect(precioVigente("activo-VOO", comprado, "2026-11-18", "automatica")?.vigente.precio).toBe(
+      50_000n,
+    );
+    const soloManual = precios.slice(0, 1);
+    expect(
+      precioVigente("activo-VOO", soloManual, "2026-11-22", "automatica")?.vigente.precio,
+    ).toBe(50_000n);
+  });
+
+  it("en un activo manual no cambia: gana el de mayor fecha", () => {
+    expect(precioVigente("activo-VOO", precios, "2026-11-22")?.vigente.precio).toBe(50_000n);
+    expect(precioVigente("activo-VOO", precios, "2026-11-22", "manual")?.vigente.precio).toBe(
+      50_000n,
+    );
+  });
+});

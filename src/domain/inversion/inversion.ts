@@ -23,7 +23,24 @@ export const CLASES_OPERACION = ["inicial", "compra", "venta"] as const;
 
 export type ClaseOperacion = (typeof CLASES_OPERACION)[number];
 
-export type OrigenPrecio = "manual";
+/** Modo de cotización de un activo (SPEC 11). Espejo del `check` de `inversion_activos.cotizacion`. */
+export const COTIZACIONES = ["automatica", "manual"] as const;
+
+export type Cotizacion = (typeof COTIZACIONES)[number];
+
+/** Clase de activo según el proveedor (SPEC 11). Espejo del `check` de `inversion_activos.clase`. */
+export const CLASES_ACTIVO = ["accion", "etf", "cripto"] as const;
+
+export type ClaseActivo = (typeof CLASES_ACTIVO)[number];
+
+/**
+ * Origen de un precio. `manual`: lo digitó el usuario o es el costo unitario
+ * de la operación que creó el activo. `cierre`: cierre del proveedor, con la
+ * fecha de la sesión. `intradia`: último precio del día, solo cripto (SPEC 11).
+ */
+export const ORIGENES_PRECIO = ["manual", "cierre", "intradia"] as const;
+
+export type OrigenPrecio = (typeof ORIGENES_PRECIO)[number];
 
 /** 10⁸: una unidad entera de un activo en la escala de la cantidad. */
 export const UNIDAD = 100_000_000n;
@@ -34,6 +51,12 @@ export type Activo = {
   simbolo: string;
   nombre: string;
   creadoEn: Date;
+  cotizacion: Cotizacion;
+  clase: ClaseActivo | null;
+  /** Símbolo en el proveedor (`"VOO"`, `"BTC/USD"`); solo en un activo automático. */
+  simboloFuente: string | null;
+  /** Última consulta del precio actual al proveedor, haya respondido o no. */
+  consultadoEn: Date | null;
 };
 
 export type Operacion = {
@@ -73,6 +96,18 @@ export type Valoracion = {
 
 export function esMoneda(valor: string): valor is Moneda {
   return (MONEDAS as readonly string[]).includes(valor);
+}
+
+export function esCotizacion(valor: string): valor is Cotizacion {
+  return (COTIZACIONES as readonly string[]).includes(valor);
+}
+
+export function esClaseActivo(valor: string): valor is ClaseActivo {
+  return (CLASES_ACTIVO as readonly string[]).includes(valor);
+}
+
+export function esOrigenPrecio(valor: string): valor is OrigenPrecio {
+  return (ORIGENES_PRECIO as readonly string[]).includes(valor);
 }
 
 export function esClaseOperacion(valor: string): valor is ClaseOperacion {

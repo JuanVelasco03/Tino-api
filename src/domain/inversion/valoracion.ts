@@ -6,6 +6,7 @@ import {
   UNIDAD,
   dividirRedondeando,
   type Activo,
+  type Cotizacion,
   type Moneda,
   type Operacion,
   type Posicion,
@@ -27,17 +28,28 @@ export type PrecioVigente = { vigente: Precio; anterior: Precio | null };
  * `cotizadoEn`. Si ninguno es ≤ F, el más antiguo. `anterior`: el que le sigue
  * en ese orden, o nulo. Sin fecha, el más reciente. `precios` puede traer los
  * de otros activos: se filtran por `activoId`. Sin precios, `null`.
+ *
+ * En un activo automático (SPEC 11), si hay precios del proveedor (`cierre`,
+ * `intradia`) con fecha ≤ F, la regla se aplica solo entre ellos: el costo
+ * unitario con que nació el activo, o un precio de cuando era manual, no le
+ * gana al último cierre del proveedor por tener fecha posterior.
  */
 export function precioVigente(
   activoId: string,
   precios: readonly Precio[],
   fecha?: string,
+  cotizacion: Cotizacion = "manual",
 ): PrecioVigente | null {
   const propios = precios.filter((p) => p.activoId === activoId).toSorted(masReciente);
   if (propios.length === 0) return null;
-  let indice = fecha === undefined ? 0 : propios.findIndex((p) => p.fecha <= fecha);
-  if (indice === -1) indice = propios.length - 1;
-  return { vigente: propios[indice]!, anterior: propios[indice + 1] ?? null };
+  const delProveedor = propios.filter((p) => p.origen !== "manual");
+  const candidatos =
+    cotizacion === "automatica" && delProveedor.some((p) => fecha === undefined || p.fecha <= fecha)
+      ? delProveedor
+      : propios;
+  let indice = fecha === undefined ? 0 : candidatos.findIndex((p) => p.fecha <= fecha);
+  if (indice === -1) indice = candidatos.length - 1;
+  return { vigente: candidatos[indice]!, anterior: candidatos[indice + 1] ?? null };
 }
 
 /** `cantidad × precio ÷ 10⁸`, redondeado. */
@@ -97,7 +109,7 @@ export type DatosInversion = {
 export function valorarInversion(datos: DatosInversion, fecha?: string): InversionValorada {
   const caja = efectivo(datos.saldoCuenta, datos.operaciones, fecha);
   const posiciones = posicionesAbiertas(datos.activos, datos.operaciones, fecha).map((p) => {
-    const precio = precioVigente(p.activo.id, datos.precios, fecha);
+    const precio = precioVigente(p.activo.id, datos.precios, fecha, p.activo.cotizacion);
     return {
       ...p,
       ...valorar(p.cantidad, p.costo, precio?.vigente.precio ?? 0n),

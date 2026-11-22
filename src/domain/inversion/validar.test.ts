@@ -11,6 +11,7 @@ import {
   validarOperacion,
   validarMovimientoConInversion,
   validarPrecio,
+  nombreDeActivo,
   validarTrasCambio,
   type OperacionEntrada,
 } from "./validar.js";
@@ -108,7 +109,7 @@ describe("validarAltaInversion", () => {
     efectivoInicial: 0n,
     posiciones: [] as {
       simbolo: string;
-      nombre: string;
+      nombre: string | null;
       cantidad: string;
       costo: bigint;
       fecha: string;
@@ -375,5 +376,43 @@ describe("validarMovimientoConInversion", () => {
 
   it("inversionesTocadas", () => {
     expect(inversionesTocadas(["b", "i", null, "i", "x"], cuentas)).toEqual(["i"]);
+  });
+});
+
+describe("nombreDeActivo (SPEC 11)", () => {
+  const cubre = {
+    cubierto: true as const,
+    clase: "etf" as const,
+    simboloFuente: "VOO",
+    nombre: "Vanguard S&P 500 ETF",
+  };
+
+  it("con nombre del usuario, gana el del usuario", () => {
+    expect(nombreDeActivo("  Mi VOO ", cubre)).toBe("Mi VOO");
+    expect(nombreDeActivo("Renovables", { cubierto: false })).toBe("Renovables");
+  });
+
+  it("sin nombre y cubierto, el del proveedor recortado a 80", () => {
+    expect(nombreDeActivo(null, cubre)).toBe("Vanguard S&P 500 ETF");
+    expect(nombreDeActivo(null, { ...cubre, nombre: "x".repeat(90) })).toHaveLength(80);
+  });
+
+  it("sin nombre y sin cobertura, null (NOMBRE_REQUERIDO)", () => {
+    expect(nombreDeActivo(null, { cubierto: false })).toBeNull();
+    expect(nombreDeActivo("  ", { cubierto: false })).toBeNull();
+  });
+
+  it("validarAltaInversion admite una posición sin nombre", () => {
+    expect(
+      validarAltaInversion(
+        {
+          nombre: "eToro",
+          moneda: "USD",
+          efectivoInicial: 0n,
+          posiciones: [{ simbolo: "VOO", nombre: null, cantidad: "1", costo: 1000n, fecha: HOY }],
+        },
+        HOY,
+      ),
+    ).toBeNull();
   });
 });

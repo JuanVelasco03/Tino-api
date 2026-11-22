@@ -35,10 +35,16 @@ export const idInversion = uuid;
 export const idOperacion = uuid;
 export const idActivo = uuid;
 
+/** Opcional si el proveedor cubre el símbolo (SPEC 11); si no, lo exige el servicio. */
+const nombreActivo = z
+  .string({ error: "NOMBRE_REQUERIDO" })
+  .nullish()
+  .transform((n) => n ?? null);
+
 const posicionInicial = z.object(
   {
     simbolo,
-    nombre: z.string({ error: "NOMBRE_REQUERIDO" }),
+    nombre: nombreActivo,
     cantidad,
     costo: monto,
     fecha: fechaOpcional,
@@ -66,10 +72,7 @@ export const cuerpoOperacion = z.object(
   {
     clase: z.string({ error: "ENTRADA_INVALIDA" }),
     simbolo,
-    nombre: z
-      .string({ error: "NOMBRE_REQUERIDO" })
-      .nullish()
-      .transform((n) => n ?? null),
+    nombre: nombreActivo,
     cantidad,
     monto,
     fecha: fechaOpcional,
@@ -103,3 +106,13 @@ export type CuerpoPrecio = z.output<typeof cuerpoPrecio>;
 
 /** GET /inversiones/:id/operaciones?activoId=. */
 export const consultaActivo = uuid.optional();
+
+/** GET /inversiones/:id/activos/buscar?simbolo= (SPEC 11). Su formato lo valida el dominio. */
+export const consultaSimbolo = z.string({ error: "SIMBOLO_INVALIDO" });
+
+/** PATCH /inversiones/:id/activos/:activoId (SPEC 11). Otro valor o campo: ENTRADA_INVALIDA. */
+export const cuerpoCotizacion = z.strictObject(
+  { cotizacion: z.enum(["automatica", "manual"], { error: "ENTRADA_INVALIDA" }) },
+  { error: "ENTRADA_INVALIDA" },
+);
+export type CuerpoCotizacion = z.output<typeof cuerpoCotizacion>;

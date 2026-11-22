@@ -46,3 +46,35 @@ describe("leerEnv — CLAVE_MONTOS_V1 (SPEC 05)", () => {
     expect(env.claveMontosV1.equals(clave)).toBe(true);
   });
 });
+
+describe("leerEnv — TWELVE_DATA_API_KEY (SPEC 11)", () => {
+  const original = { ...process.env };
+
+  beforeEach(() => {
+    process.env.SUPABASE_URL = "https://ejemplo.supabase.co";
+    process.env.SUPABASE_PUBLISHABLE_KEY = "publicable";
+    process.env.CLAVE_MONTOS_V1 = randomBytes(32).toString("base64");
+  });
+
+  afterEach(() => {
+    process.env = { ...original };
+  });
+
+  it("es opcional: sin ella arranca con null", async () => {
+    delete process.env.TWELVE_DATA_API_KEY;
+    const env = await leer();
+    expect(env.twelveDataApiKey).toBeNull();
+  });
+
+  it("vacía o solo espacios cuenta como ausente", async () => {
+    process.env.TWELVE_DATA_API_KEY = "   ";
+    const env = await leer();
+    expect(env.twelveDataApiKey).toBeNull();
+  });
+
+  it("se entrega recortada", async () => {
+    process.env.TWELVE_DATA_API_KEY = "  abc123  ";
+    const env = await leer();
+    expect(env.twelveDataApiKey).toBe("abc123");
+  });
+});

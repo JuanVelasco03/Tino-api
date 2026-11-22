@@ -128,27 +128,39 @@ export type Database = {
       };
       inversion_activos: {
         Row: {
+          clase: string | null;
+          consultado_en: string | null;
+          cotizacion: string;
           creado_en: string;
           cuenta_id: string;
           id: string;
           nombre: string;
           simbolo: string;
+          simbolo_fuente: string | null;
           usuario_id: string;
         };
         Insert: {
+          clase?: string | null;
+          consultado_en?: string | null;
+          cotizacion?: string;
           creado_en?: string;
           cuenta_id: string;
           id?: string;
           nombre: string;
           simbolo: string;
+          simbolo_fuente?: string | null;
           usuario_id?: string;
         };
         Update: {
+          clase?: string | null;
+          consultado_en?: string | null;
+          cotizacion?: string;
           creado_en?: string;
           cuenta_id?: string;
           id?: string;
           nombre?: string;
           simbolo?: string;
+          simbolo_fuente?: string | null;
           usuario_id?: string;
         };
         Relationships: [
@@ -993,6 +1005,10 @@ export type Database = {
       };
       eliminar_movimiento: { Args: { p_id: string }; Returns: undefined };
       foto_movimiento: { Args: { p_id: string }; Returns: Json };
+      guardar_precios_automaticos: {
+        Args: { p_consultados: string[]; p_precios: Json };
+        Returns: undefined;
+      };
       insertar_semilla: { Args: { p_usuario: string }; Returns: undefined };
       moneda_de_movimiento: {
         Args: {
@@ -1060,6 +1076,8 @@ export type Database = {
           p_activo_id: string;
           p_cantidad: string;
           p_clase: string;
+          p_clase_activo?: string;
+          p_cotizacion?: string;
           p_cuenta_id: string;
           p_fecha: string;
           p_monto: string;
@@ -1067,6 +1085,7 @@ export type Database = {
           p_operacion_id: string;
           p_precio_cent: number;
           p_simbolo: string;
+          p_simbolo_fuente?: string;
         };
         Returns: string;
       };

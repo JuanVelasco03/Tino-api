@@ -1,17 +1,26 @@
 /** Datos de prueba del dominio de inversiones (SPEC 10). */
-import type { Activo, ClaseOperacion, Operacion, Precio } from "./inversion.js";
+import type { Activo, ClaseOperacion, OrigenPrecio, Operacion, Precio } from "./inversion.js";
 
 export const UNA = 100_000_000n;
 
 let secuencia = 0;
 
-export function activo(simbolo: string, creadoEn = "2026-01-01T00:00:00Z"): Activo {
+export function activo(
+  simbolo: string,
+  creadoEn = "2026-01-01T00:00:00Z",
+  extra: Partial<Activo> = {},
+): Activo {
   return {
     id: `activo-${simbolo}`,
     cuentaId: "cuenta",
     simbolo,
     nombre: simbolo,
     creadoEn: new Date(creadoEn),
+    cotizacion: "manual",
+    clase: null,
+    simboloFuente: null,
+    consultadoEn: null,
+    ...extra,
   };
 }
 
@@ -44,12 +53,13 @@ export function precio(
   valor: bigint,
   fecha: string,
   cotizadoEn = `${fecha}T12:00:00Z`,
+  origen: OrigenPrecio = "manual",
 ): Precio {
   return {
     activoId: `activo-${simbolo}`,
     precio: valor,
     fecha,
-    origen: "manual",
+    origen,
     cotizadoEn: new Date(cotizadoEn),
   };
 }

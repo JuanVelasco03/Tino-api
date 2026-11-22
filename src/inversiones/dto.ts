@@ -7,7 +7,15 @@
  * En una inversión COP, todo campo `…Cop` es null: el monto ya está en pesos.
  */
 import { formatearCantidad } from "../domain/inversion/cantidad.js";
-import type { Activo, Moneda } from "../domain/inversion/inversion.js";
+import type {
+  Activo,
+  ClaseActivo,
+  Cotizacion,
+  Moneda,
+  OrigenPrecio,
+} from "../domain/inversion/inversion.js";
+import type { Cobertura } from "../domain/precio/precio.js";
+import { precioVencido } from "../domain/precio/vencimiento.js";
 import { precioUnitario } from "../domain/inversion/posiciones.js";
 import type { OperacionLeida } from "../repositories/supabase/inversiones.repository.js";
 import {
@@ -51,7 +59,13 @@ export type PosicionDto = {
   /** Último, por unidad. */
   precio: string;
   precioFecha: string;
-  precioOrigen: "manual";
+  precioOrigen: OrigenPrecio;
+  /** ISO 8601 UTC; la hora del intradía la arma el cliente en la zona del usuario (SPEC 11). */
+  precioCotizadoEn: string;
+  /** Automático cuya última consulta no trajo precio (SPEC 11). */
+  precioVencido: boolean;
+  cotizacion: Cotizacion;
+  clase: ClaseActivo | null;
   precioAnterior: { precio: string; fecha: string } | null;
   valor: string;
   valorCop: string | null;
@@ -83,6 +97,32 @@ export type InversionDetalleDto = {
   posiciones: PosicionDto[];
   archivadaEn: string | null;
 };
+
+/** GET /inversiones/:id/activos/buscar (SPEC 11). */
+export type BusquedaActivoDto = {
+  /** Normalizado. */
+  simbolo: string;
+  cubierto: boolean;
+  /** Del proveedor, si cubre. */
+  nombre: string | null;
+  clase: ClaseActivo | null;
+  /** false: sin clave o la fuente falló; entonces `cubierto` es false. */
+  proveedorDisponible: boolean;
+};
+
+export function aBusquedaActivoDto(
+  simbolo: string,
+  cobertura: Cobertura,
+  proveedorDisponible: boolean,
+): BusquedaActivoDto {
+  return {
+    simbolo,
+    cubierto: cobertura.cubierto,
+    nombre: cobertura.cubierto ? cobertura.nombre : null,
+    clase: cobertura.cubierto ? cobertura.clase : null,
+    proveedorDisponible,
+  };
+}
 
 export type OperacionDto = {
   id: string;
@@ -149,6 +189,10 @@ function aPosicionDto(
     precio: (p.precio?.precio ?? 0n).toString(),
     precioFecha: p.precio?.fecha ?? fechaHoy,
     precioOrigen: p.precio?.origen ?? "manual",
+    precioCotizadoEn: (p.precio?.cotizadoEn ?? p.activo.creadoEn).toISOString(),
+    precioVencido: precioVencido(p.activo, p.precio),
+    cotizacion: p.activo.cotizacion,
+    clase: p.activo.clase,
     precioAnterior:
       p.precioAnterior === null
         ? null

@@ -9,6 +9,9 @@
  *   nuevo, el activo y su primer precio), atómicas. Las ediciones y
  *   eliminaciones de operaciones van por UPDATE y DELETE directos con RLS; el
  *   historial lo escribe el trigger (RN-13). Los precios manuales, por INSERT.
+ * - Precios automáticos (SPEC 11): `guardar_precios_automaticos` guarda los
+ *   cierres e intradías del proveedor y marca los activos consultados; el modo
+ *   de cotización del activo, por UPDATE directo con permisos de columna.
  *
  * Montos cifrados (SPEC 05): el efectivo inicial con la AAD de la cuenta; la
  * cantidad y el monto de cada operación con
@@ -22,14 +25,20 @@ import type { UsuarioAutenticado } from "../../autenticacion/usuario.js";
 import { ErrorApi } from "../../comun/error-api.js";
 import {
   TIPO_INVERSION,
+  esClaseActivo,
   esClaseOperacion,
+  esCotizacion,
   esMoneda,
+  esOrigenPrecio,
   type Activo,
+  type ClaseActivo,
   type ClaseOperacion,
+  type Cotizacion,
   type Moneda,
   type Operacion,
   type Precio,
 } from "../../domain/inversion/inversion.js";
+import type { PrecioObtenido } from "../../domain/precio/precio.js";
 import type { InversionPatrimonio } from "../../domain/resumen/resumen.js";
 import { CifradorMontos, contexto } from "../cifrado/montos.js";
 import { ClienteSupabase } from "./cliente.js";
@@ -39,6 +48,8 @@ import type { Database, TablesInsert, TablesUpdate } from "./tipos.js";
 type Funciones = Database["public"]["Functions"];
 
 const COLUMNAS_CUENTA = "id, nombre, moneda, saldo_inicial, posicion, archivada_en, creado_en";
+const COLUMNAS_ACTIVO =
+  "id, cuenta_id, simbolo, nombre, creado_en, cotizacion, clase, simbolo_fuente, consultado_en";
 const COLUMNAS_OPERACION =
   "id, cuenta_id, activo_id, clase, cantidad, monto, fecha, creado_en, actualizado_en";
 
@@ -55,9 +66,21 @@ export type CuentaInversion = {
 
 export type OperacionLeida = Operacion & { cuentaId: string };
 
+/** Modo con que nace un activo: automático si el proveedor lo cubre (SPEC 11). */
+export type CotizacionNueva =
+  | { cotizacion: "automatica"; clase: ClaseActivo; simboloFuente: string }
+  | { cotizacion: "manual"; clase: null; simboloFuente: null };
+
+export const COTIZACION_MANUAL: CotizacionNueva = {
+  cotizacion: "manual",
+  clase: null,
+  simboloFuente: null,
+};
+
 export type PosicionInicialNueva = {
   simbolo: string;
   nombre: string;
+  cotizacion: CotizacionNueva;
   cantidad: bigint;
   monto: bigint;
   fecha: string;
@@ -81,7 +104,17 @@ export type OperacionNueva = {
   fecha: string;
   /** Primer precio, si el activo es nuevo. */
   precio: bigint;
+  /** Modo, si el activo es nuevo. */
+  cotizacion: CotizacionNueva;
 };
+
+/**
+ * Cambio de modo del activo (SPEC 11). A automático: con su clase y su símbolo
+ * en el proveedor. A manual: sin símbolo, conservando la clase.
+ */
+export type CambioCotizacion =
+  | { cotizacion: "automatica"; clase: ClaseActivo; simboloFuente: string }
+  | { cotizacion: "manual" };
 
 export type CambioOperacionDatos = { cantidad?: bigint; monto?: bigint; fecha?: string };
 
@@ -101,6 +134,10 @@ type FilaActivo = {
   simbolo: string;
   nombre: string;
   creado_en: string;
+  cotizacion: string;
+  clase: string | null;
+  simbolo_fuente: string | null;
+  consultado_en: string | null;
 };
 
 type FilaOperacion = {
@@ -147,6 +184,31 @@ function aMoneda(valor: string): Moneda {
 function aClase(valor: string): ClaseOperacion {
   if (!esClaseOperacion(valor)) throw new Error(`Clase de operación desconocida: ${valor}`);
   return valor;
+}
+
+function aCotizacion(valor: string): Cotizacion {
+  if (!esCotizacion(valor)) throw new Error(`Cotización desconocida: ${valor}`);
+  return valor;
+}
+
+function aClaseActivo(valor: string | null): ClaseActivo | null {
+  if (valor === null) return null;
+  if (!esClaseActivo(valor)) throw new Error(`Clase de activo desconocida: ${valor}`);
+  return valor;
+}
+
+function aActivo(f: FilaActivo): Activo {
+  return {
+    id: f.id,
+    cuentaId: f.cuenta_id,
+    simbolo: f.simbolo,
+    nombre: f.nombre,
+    creadoEn: new Date(f.creado_en),
+    cotizacion: aCotizacion(f.cotizacion),
+    clase: aClaseActivo(f.clase),
+    simboloFuente: f.simbolo_fuente,
+    consultadoEn: f.consultado_en === null ? null : new Date(f.consultado_en),
+  };
 }
 
 @Injectable()
@@ -222,19 +284,11 @@ export class InversionesRepository {
   /** Activos de las cuentas `cuentaIds` (todas las del usuario si no se dan). */
   async activos(usuario: UsuarioAutenticado, cuentaIds?: readonly string[]): Promise<Activo[]> {
     if (cuentaIds?.length === 0) return [];
-    let consulta = this.cliente(usuario.token)
-      .from("inversion_activos")
-      .select("id, cuenta_id, simbolo, nombre, creado_en");
+    let consulta = this.cliente(usuario.token).from("inversion_activos").select(COLUMNAS_ACTIVO);
     if (cuentaIds !== undefined) consulta = consulta.in("cuenta_id", [...cuentaIds]);
     const { data, error } = await consulta;
     if (error) throw traducir(error);
-    return (data as FilaActivo[]).map((f) => ({
-      id: f.id,
-      cuentaId: f.cuenta_id,
-      simbolo: f.simbolo,
-      nombre: f.nombre,
-      creadoEn: new Date(f.creado_en),
-    }));
+    return (data as FilaActivo[]).map(aActivo);
   }
 
   /**
@@ -267,7 +321,7 @@ export class InversionesRepository {
     const { data, error } = await consulta;
     if (error) throw traducir(error);
     return (data as unknown as FilaPrecio[]).map((f) => {
-      if (f.origen !== "manual") throw new Error(`Origen de precio desconocido: ${f.origen}`);
+      if (!esOrigenPrecio(f.origen)) throw new Error(`Origen de precio desconocido: ${f.origen}`);
       return {
         activoId: f.activo_id,
         precio: BigInt(f.precio_cent),
@@ -325,6 +379,9 @@ export class InversionesRepository {
         activo_id: randomUUID(),
         simbolo: p.simbolo,
         nombre: p.nombre,
+        cotizacion: p.cotizacion.cotizacion,
+        clase: p.cotizacion.clase,
+        simbolo_fuente: p.cotizacion.simboloFuente,
         cantidad: this.cifrador.cifrar(
           p.cantidad,
           contexto.operacion(usuario.id, operacionId, "cantidad"),
@@ -369,6 +426,9 @@ export class InversionesRepository {
       p_fecha: datos.fecha,
       // bigint como texto: PostgREST lo convierte sin pasar por number.
       p_precio_cent: datos.precio.toString(),
+      p_cotizacion: datos.cotizacion.cotizacion,
+      p_clase_activo: datos.cotizacion.clase,
+      p_simbolo_fuente: datos.cotizacion.simboloFuente,
     };
     const { data, error } = await this.cliente(usuario.token).rpc(
       "registrar_operacion",
@@ -455,5 +515,61 @@ export class InversionesRepository {
       .from("inversion_precios")
       .insert(fila as unknown as TablesInsert<"inversion_precios">);
     if (error) throw traducir(error);
+  }
+
+  /**
+   * Guarda lo que trajo el proveedor y marca los activos consultados, en una
+   * transacción (SPEC 11). `consultados` incluye los que fallaron: así la
+   * siguiente lectura no repite la consulta. La RLS limita todo a lo propio.
+   */
+  async guardarPreciosAutomaticos(
+    usuario: UsuarioAutenticado,
+    precios: readonly PrecioObtenido[],
+    consultados: readonly string[],
+  ): Promise<void> {
+    if (precios.length === 0 && consultados.length === 0) return;
+    const filas = precios.map((p) => ({
+      activo_id: p.activoId,
+      // bigint como texto: Postgres lo convierte sin pasar por number.
+      precio_cent: p.precio.toString(),
+      fecha: p.fecha,
+      origen: p.origen,
+      cotizado_en: p.cotizadoEn.toISOString(),
+    }));
+    const { error } = await this.cliente(usuario.token).rpc("guardar_precios_automaticos", {
+      p_precios: filas,
+      p_consultados: [...consultados],
+    });
+    if (error) throw traducir(error);
+  }
+
+  /**
+   * UPDATE directo con RLS del modo del activo `activoId` de la cuenta
+   * `cuentaId`; deja `consultado_en` en nulo. `false` si no hay tal activo.
+   */
+  async actualizarCotizacion(
+    usuario: UsuarioAutenticado,
+    cuentaId: string,
+    activoId: string,
+    cambio: CambioCotizacion,
+  ): Promise<boolean> {
+    const fila = (
+      cambio.cotizacion === "automatica"
+        ? {
+            cotizacion: cambio.cotizacion,
+            clase: cambio.clase,
+            simbolo_fuente: cambio.simboloFuente,
+            consultado_en: null,
+          }
+        : { cotizacion: cambio.cotizacion, simbolo_fuente: null, consultado_en: null }
+    ) satisfies TablesUpdate<"inversion_activos">;
+    const { data, error } = await this.cliente(usuario.token)
+      .from("inversion_activos")
+      .update(fila)
+      .eq("id", activoId)
+      .eq("cuenta_id", cuentaId)
+      .select("id");
+    if (error) throw traducir(error);
+    return data.length > 0;
   }
 }

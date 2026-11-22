@@ -199,6 +199,21 @@ export function fechasConTrm(datos: DatosPatrimonio, hoy: string, mes: string): 
   return [...fechas].toSorted();
 }
 
+/**
+ * Fechas en que el patrimonio valora las inversiones: los cierres de la serie
+ * y del puente de `mes`, y hoy. Solo las que no son futuras: ahí los precios
+ * automáticos pasados que hay que completar (SPEC 11).
+ */
+export function fechasDePrecios(hoy: string, mes: string): string[] {
+  const fechas = new Set([
+    ...mesesAnteriores(hoy.slice(0, 7), MESES_SERIE).map(ultimoDia),
+    hoy,
+    ultimoDia(mesAnterior(mes)),
+    ultimoDia(mes),
+  ]);
+  return [...fechas].filter((f) => f <= hoy).toSorted();
+}
+
 /** Día de creación de la cuenta más antigua, archivadas incluidas; `null` sin cuentas. */
 export function inicio(cuentas: readonly CuentaPatrimonio[]): string | null {
   let primero: string | null = null;
