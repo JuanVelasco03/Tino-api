@@ -312,6 +312,13 @@ export const CATALOGO = {
     mensaje: "Este activo tiene precio automático. Pásalo a manual para fijar su precio.",
     campo: "precio",
   },
+  // Avisos (SPEC 12)
+  AVISO_NO_ENCONTRADO: { estado: 404, mensaje: "El aviso ya no existe." },
+  ANTELACION_INVALIDA: {
+    estado: 400,
+    mensaje: "Elige una de las opciones de este tipo de aviso.",
+    campo: "dias",
+  },
   NO_AUTENTICADO: { estado: 401, mensaje: "Inicia sesión para continuar." },
   ERROR_INTERNO: {
     estado: 500,

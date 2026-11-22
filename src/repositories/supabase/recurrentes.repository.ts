@@ -42,7 +42,7 @@ const COLUMNAS =
   "creado_en, actualizado_en";
 
 const COLUMNAS_CIERRE =
-  "recurrente_id, vencimiento, estado, movimiento_id, " +
+  "recurrente_id, vencimiento, estado, movimiento_id, creado_en, " +
   "movimiento:movimientos!recurrentes_cierres_movimiento_fkey(monto)";
 
 /** Plantilla leída, con los nombres de sus cuentas y su categoría. */
@@ -54,7 +54,10 @@ export type PlantillaLeida = Recurrente & {
   actualizadoEn: Date;
 };
 
-export type LecturaRecurrentes = { plantillas: PlantillaLeida[]; cierres: Cierre[] };
+/** Cierre leído, con el instante en que se cerró (SPEC 12: fecha de la resolución). */
+export type CierreLeido = Cierre & { creadoEn: Date };
+
+export type LecturaRecurrentes = { plantillas: PlantillaLeida[]; cierres: CierreLeido[] };
 
 /** Columnas del calendario que fija el servicio (SPEC 07, reglas de escritura). */
 export type CalendarioEscrito = { generarDesde: string; pausadaDesde: string | null };
@@ -85,6 +88,7 @@ type FilaCierre = {
   vencimiento: string;
   estado: string;
   movimiento_id: string | null;
+  creado_en: string;
   movimiento: { monto: unknown } | null;
 };
 
@@ -170,7 +174,7 @@ export class RecurrentesRepository {
     };
   }
 
-  private aCierre(usuarioId: string, f: FilaCierre): Cierre {
+  private aCierre(usuarioId: string, f: FilaCierre): CierreLeido {
     if (f.estado !== "confirmada" && f.estado !== "omitida") {
       throw new Error(`Estado de cierre desconocido: ${f.estado}`);
     }
@@ -189,6 +193,7 @@ export class RecurrentesRepository {
             contexto.movimiento(usuarioId, f.movimiento_id!),
           )
         : null,
+      creadoEn: new Date(f.creado_en),
     };
   }
 

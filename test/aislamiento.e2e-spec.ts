@@ -28,6 +28,9 @@
  * SPEC 11: precios `cierre` e `intradia`, UPDATE de la cotización del activo
  * y del intradía, `guardar_precios_automaticos` (security invoker) atacada
  * con datos ajenos, permisos de columna del activo y su `check` de modo.
+ *
+ * SPEC 12: `avisos_config` y `avisos_leidos`: SELECT, INSERT y UPDATE propios;
+ * sin DELETE; los `check` de opciones por tipo y de forma de la clave.
  */
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -1460,6 +1463,156 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
         .eq("id", datosA.activo);
       expect(error?.code).toBe("23514");
       expect(error?.message).toContain("inversion_activos_cotizacion_check");
+    });
+  });
+
+  describe("avisos (SPEC 12)", () => {
+    const fuente = (u: Usuario) => u.id;
+    const claveDe = (u: Usuario) => `cobro:${fuente(u)}:2026-11-01`;
+
+    beforeAll(async () => {
+      for (const [u, dias] of [
+        [a, 14],
+        [b, 0],
+      ] as const) {
+        const { error: errorConfig } = await u.cliente
+          .from("avisos_config")
+          .insert({ tipo: "cobro", activo: true, dias });
+        if (errorConfig)
+          throw new Error(`No se pudo sembrar avisos_config: ${errorConfig.message}`);
+        const { error: errorMarca } = await u.cliente
+          .from("avisos_leidos")
+          .insert({ clave: claveDe(u), leido: true });
+        if (errorMarca) throw new Error(`No se pudo sembrar avisos_leidos: ${errorMarca.message}`);
+      }
+    });
+
+    it("cada usuario ve solo su configuración y sus marcas", async () => {
+      for (const [u, dias] of [
+        [a, 14],
+        [b, 0],
+      ] as const) {
+        const { data: config, error: errorConfig } = await u.cliente
+          .from("avisos_config")
+          .select("usuario_id, tipo, dias");
+        expect(errorConfig).toBeNull();
+        expect(config).toEqual([{ usuario_id: u.id, tipo: "cobro", dias }]);
+
+        const { data: marcas, error: errorMarcas } = await u.cliente
+          .from("avisos_leidos")
+          .select("usuario_id, clave");
+        expect(errorMarcas).toBeNull();
+        expect(marcas).toEqual([{ usuario_id: u.id, clave: claveDe(u) }]);
+      }
+    });
+
+    it("UPDATE de filas ajenas afecta 0 filas", async () => {
+      const { data: config, error: errorConfig } = await a.cliente
+        .from("avisos_config")
+        .update({ activo: false })
+        .eq("usuario_id", b.id)
+        .select("tipo");
+      expect(errorConfig).toBeNull();
+      expect(config).toEqual([]);
+
+      const { data: marcas, error: errorMarcas } = await a.cliente
+        .from("avisos_leidos")
+        .update({ leido: false })
+        .eq("usuario_id", b.id)
+        .select("clave");
+      expect(errorMarcas).toBeNull();
+      expect(marcas).toEqual([]);
+
+      const { data: realConfig } = await admin
+        .from("avisos_config")
+        .select("activo")
+        .eq("usuario_id", b.id);
+      expect(realConfig).toEqual([{ activo: true }]);
+      const { data: realMarca } = await admin
+        .from("avisos_leidos")
+        .select("leido")
+        .eq("usuario_id", b.id);
+      expect(realMarca).toEqual([{ leido: true }]);
+    });
+
+    it("INSERT con usuario_id ajeno falla por RLS", async () => {
+      const { error: errorConfig } = await a.cliente
+        .from("avisos_config")
+        .insert({ usuario_id: b.id, tipo: "deuda", activo: true, dias: 3 });
+      expect(errorConfig?.code).toBe("42501");
+
+      const { error: errorMarca } = await a.cliente
+        .from("avisos_leidos")
+        .insert({ usuario_id: b.id, clave: `deuda:${b.id}:2026-11-01`, leido: true });
+      expect(errorMarca?.code).toBe("42501");
+
+      const { data: config } = await admin
+        .from("avisos_config")
+        .select("tipo")
+        .eq("usuario_id", b.id);
+      expect(config).toEqual([{ tipo: "cobro" }]);
+      const { data: marcas } = await admin
+        .from("avisos_leidos")
+        .select("clave")
+        .eq("usuario_id", b.id);
+      expect(marcas).toEqual([{ clave: claveDe(b) }]);
+    });
+
+    it("DELETE propio afecta 0 filas (sin política)", async () => {
+      const { data: config, error: errorConfig } = await a.cliente
+        .from("avisos_config")
+        .delete()
+        .eq("usuario_id", a.id)
+        .select("tipo");
+      expect(errorConfig).toBeNull();
+      expect(config).toEqual([]);
+
+      const { data: marcas, error: errorMarcas } = await a.cliente
+        .from("avisos_leidos")
+        .delete()
+        .eq("usuario_id", a.id)
+        .select("clave");
+      expect(errorMarcas).toBeNull();
+      expect(marcas).toEqual([]);
+
+      const { count: filasConfig } = await admin
+        .from("avisos_config")
+        .select("tipo", { count: "exact", head: true })
+        .eq("usuario_id", a.id);
+      expect(filasConfig).toBe(1);
+      const { count: filasMarcas } = await admin
+        .from("avisos_leidos")
+        .select("clave", { count: "exact", head: true })
+        .eq("usuario_id", a.id);
+      expect(filasMarcas).toBe(1);
+    });
+
+    it("dias fuera de las opciones del tipo viola avisos_config_dias_check", async () => {
+      const { error: errorInsert } = await a.cliente
+        .from("avisos_config")
+        .insert({ tipo: "deuda", activo: true, dias: 5 });
+      expect(errorInsert?.code).toBe("23514");
+      expect(errorInsert?.message).toContain("avisos_config_dias_check");
+
+      const { error: errorUpdate } = await a.cliente
+        .from("avisos_config")
+        .update({ dias: 3 })
+        .eq("tipo", "cobro");
+      expect(errorUpdate?.code).toBe("23514");
+      expect(errorUpdate?.message).toContain("avisos_config_dias_check");
+    });
+
+    it("una clave mal formada viola avisos_leidos_clave_check", async () => {
+      for (const clave of [
+        "tarjeta:" + a.id + ":2026-11-01",
+        "cobro:abc:2026-11-01",
+        `cobro:${a.id}:2026-1-01`,
+        `cobro:${a.id}`,
+      ]) {
+        const { error } = await a.cliente.from("avisos_leidos").insert({ clave, leido: true });
+        expect(error?.code).toBe("23514");
+        expect(error?.message).toContain("avisos_leidos_clave_check");
+      }
     });
   });
 });
