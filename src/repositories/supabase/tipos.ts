@@ -9,6 +9,51 @@ export type Database = {
   };
   public: {
     Tables: {
+      avisos_config: {
+        Row: {
+          activo: boolean;
+          actualizado_en: string;
+          dias: number;
+          tipo: string;
+          usuario_id: string;
+        };
+        Insert: {
+          activo: boolean;
+          actualizado_en?: string;
+          dias: number;
+          tipo: string;
+          usuario_id?: string;
+        };
+        Update: {
+          activo?: boolean;
+          actualizado_en?: string;
+          dias?: number;
+          tipo?: string;
+          usuario_id?: string;
+        };
+        Relationships: [];
+      };
+      avisos_leidos: {
+        Row: {
+          clave: string;
+          leido: boolean;
+          marcado_en: string;
+          usuario_id: string;
+        };
+        Insert: {
+          clave: string;
+          leido: boolean;
+          marcado_en?: string;
+          usuario_id?: string;
+        };
+        Update: {
+          clave?: string;
+          leido?: boolean;
+          marcado_en?: string;
+          usuario_id?: string;
+        };
+        Relationships: [];
+      };
       categorias: {
         Row: {
           creado_en: string;

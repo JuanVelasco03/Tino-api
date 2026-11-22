@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { AutenticacionGuard } from "./autenticacion/autenticacion.guard.js";
+import { AvisosModule } from "./avisos/avisos.module.js";
 import { CapturaModule } from "./captura/captura.module.js";
 import { ErrorApiFilter } from "./comun/error-api.filter.js";
 import { CuentasModule } from "./cuentas/cuentas.module.js";
@@ -29,6 +30,7 @@ import { TrmModule } from "./trm/trm.module.js";
     PrestamosModule,
     TrmModule,
     InversionesModule,
+    AvisosModule,
   ],
   providers: [
     // Guard global: toda ruta exige un token válido del proveedor (RF-03).

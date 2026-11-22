@@ -22,6 +22,7 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 | Deudas y préstamos | [`prestamos.md`](prestamos.md) | SPEC 08, SPEC 10 |
 | TRM | [`trm.md`](trm.md) | SPEC 09 |
 | Inversiones | [`inversiones.md`](inversiones.md) | SPEC 10, SPEC 11 |
+| Avisos | [`avisos.md`](avisos.md) | SPEC 12 |
 
 ---
 
