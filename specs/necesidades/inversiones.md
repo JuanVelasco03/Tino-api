@@ -2,7 +2,7 @@
 
 > **Diseño:** `../Tino-web/referencias/export-inversiones`
 > **Fecha:** 2026-11-21
-> **Spec que la cubre:** SPEC 09 (TRM). Pendientes: SPEC 10 (cuentas de inversión) y SPEC 11 (precios automáticos).
+> **Spec que la cubre:** SPEC 09 (TRM) y SPEC 10 (cuentas de inversión). Pendiente: SPEC 11 (precios automáticos).
 
 ## Pantalla: Inversiones escritorio
 
