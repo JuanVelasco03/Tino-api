@@ -19,6 +19,7 @@ function mov(
 ): MovimientoResumen {
   return {
     id: `m${++siguiente}`,
+    montoDestino: null,
     cuentaOrigenId: datos.tipo === "ingreso" ? null : NEQUI,
     cuentaDestinoId: datos.tipo === "gasto" ? null : TARJETA,
     categoriaId: null,

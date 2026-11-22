@@ -241,6 +241,62 @@ export const CATALOGO = {
     estado: 422,
     mensaje: "El cambio deja el préstamo con capital negativo.",
   },
+  // Cuentas de inversión (SPEC 10)
+  INVERSION_NO_ENCONTRADA: { estado: 404, mensaje: "La cuenta de inversión no existe." },
+  ACTIVO_NO_ENCONTRADO: {
+    estado: 404,
+    mensaje: "No tienes ese activo en esta cuenta.",
+    campo: "simbolo",
+  },
+  OPERACION_NO_ENCONTRADA: { estado: 404, mensaje: "La operación no existe." },
+  MONEDA_INVALIDA: { estado: 400, mensaje: "Elige COP o USD.", campo: "moneda" },
+  SIMBOLO_INVALIDO: {
+    estado: 400,
+    mensaje: "Escribe el símbolo del activo, hasta 12 letras o números.",
+    campo: "simbolo",
+  },
+  CANTIDAD_INVALIDA: {
+    estado: 400,
+    mensaje: "Escribe una cantidad mayor que cero, con hasta 8 decimales.",
+    campo: "cantidad",
+  },
+  PRECIO_INVALIDO: { estado: 400, mensaje: "Escribe un precio mayor que cero.", campo: "precio" },
+  FECHA_FUTURA: { estado: 400, mensaje: "La fecha no puede ser futura.", campo: "fecha" },
+  ACTIVO_DUPLICADO: {
+    estado: 400,
+    mensaje: "Ese activo ya está en la lista.",
+    campo: "posiciones",
+  },
+  EFECTIVO_INSUFICIENTE: {
+    estado: 422,
+    mensaje: "No hay efectivo suficiente en la cuenta. Registra primero el fondeo.",
+  },
+  CANTIDAD_INSUFICIENTE: {
+    estado: 422,
+    mensaje: "No tienes esa cantidad del activo en esa fecha.",
+    campo: "cantidad",
+  },
+  MONTO_DESTINO_REQUERIDO: {
+    estado: 400,
+    mensaje: "Escribe cuánto llegó a la cuenta de destino.",
+    campo: "montoDestino",
+  },
+  MONTO_DESTINO_NO_PERMITIDO: {
+    estado: 400,
+    mensaje: "Las dos cuentas usan la misma moneda: basta un monto.",
+    campo: "montoDestino",
+  },
+  CUENTA_DE_INVERSION: {
+    estado: 422,
+    mensaje:
+      "Esa cuenta es de inversión: solo admite transferencias y se maneja desde Inversiones.",
+  },
+  TIPO_DE_INVERSION_FIJO: {
+    estado: 422,
+    mensaje: "Una cuenta de inversión no cambia de tipo.",
+    campo: "tipo",
+  },
+  MONEDA_FIJA: { estado: 422, mensaje: "La moneda de una cuenta no cambia.", campo: "moneda" },
   NO_AUTENTICADO: { estado: 401, mensaje: "Inicia sesión para continuar." },
   ERROR_INTERNO: {
     estado: 500,

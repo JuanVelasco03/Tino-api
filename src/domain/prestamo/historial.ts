@@ -61,12 +61,18 @@ export function clasificar(
   return efectoEnCapital(prestamo, m) > 0n ? "desembolso" : "abono";
 }
 
-/** Capital pendiente: saldo de la cuenta con todos sus movimientos (RN-01). */
+/**
+ * Capital pendiente: saldo de la cuenta con todos sus movimientos (RN-01).
+ * Un préstamo y su cuenta propia son COP: sin `montoDestino` (SPEC 10).
+ */
 export function capitalPendiente(
   prestamo: PrestamoBase,
   movimientos: readonly EfectoDeCapital[],
 ): bigint {
-  return calcularSaldo({ id: prestamo.id, tipo: prestamo.tipo, saldoInicial: 0n }, movimientos);
+  return calcularSaldo(
+    { id: prestamo.id, tipo: prestamo.tipo, saldoInicial: 0n },
+    movimientos.map((m) => ({ ...m, montoDestino: null })),
+  );
 }
 
 /**

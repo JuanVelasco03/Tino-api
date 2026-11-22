@@ -43,17 +43,44 @@ export function urlEn(fecha: string): string {
   return `${URL_DATASET}?$where=${encodeURIComponent(donde)}&$limit=1`;
 }
 
-/** Respuesta JSON de la fuente → TRM, o `null` si no tiene la forma esperada. Pura. */
-export function aTrm(json: unknown): Trm | null {
-  const lista = respuestaFuente.safeParse(json);
-  if (!lista.success) return null;
-  const fila = filaFuente.safeParse(lista.data[0]);
+/** URL de las filas que se cruzan con `[desde, hasta]`, en orden (SPEC 10). */
+export function urlRango(desde: string, hasta: string): string {
+  const donde = `vigenciahasta >= '${desde}T00:00:00.000' AND vigenciadesde <= '${hasta}T00:00:00.000'`;
+  return `${URL_DATASET}?$where=${encodeURIComponent(donde)}&$order=vigenciadesde&$limit=1000`;
+}
+
+/** Una fila de la fuente → TRM, o `null` si no tiene la forma esperada. */
+function aFila(json: unknown): Trm | null {
+  const fila = filaFuente.safeParse(json);
   if (!fila.success) return null;
   const valorCent = parsearValor(fila.data.valor);
   if (valorCent === null) return null;
   const { vigenciadesde, vigenciahasta } = fila.data;
   if (vigenciahasta < vigenciadesde) return null;
   return { valorCent, vigenteDesde: vigenciadesde, vigenteHasta: vigenciahasta };
+}
+
+/** Respuesta JSON de la fuente → TRM, o `null` si no tiene la forma esperada. Pura. */
+export function aTrm(json: unknown): Trm | null {
+  const lista = respuestaFuente.safeParse(json);
+  if (!lista.success) return null;
+  return aFila(lista.data[0]);
+}
+
+/**
+ * Respuesta JSON de un rango → TRM de cada fila (SPEC 10). Una lista vacía es
+ * válida (no hay filas en el rango); `null` si no es una lista o alguna fila
+ * no tiene la forma esperada: una respuesta a medias no se guarda. Pura.
+ */
+export function aTrms(json: unknown): Trm[] | null {
+  if (!Array.isArray(json)) return null;
+  const trms: Trm[] = [];
+  for (const fila of json) {
+    const trm = aFila(fila);
+    if (trm === null) return null;
+    trms.push(trm);
+  }
+  return trms;
 }
 
 @Injectable()
@@ -74,6 +101,30 @@ export class TrmFuente {
     } catch (error) {
       const motivo = error instanceof Error ? error.name : "desconocido";
       this.logger.warn(`TRM ${fecha}: no se pudo consultar la fuente (${motivo})`);
+      return null;
+    }
+  }
+
+  /**
+   * TRM de todas las vigencias que se cruzan con `[desde, hasta]`, en una sola
+   * consulta (SPEC 10). Mismo timeout y misma regla de falla: `null` y aviso.
+   */
+  async obtenerRango(desde: string, hasta: string): Promise<Trm[] | null> {
+    const rango = `${desde}..${hasta}`;
+    try {
+      const respuesta = await fetch(urlRango(desde, hasta), {
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (respuesta.status !== 200) {
+        this.logger.warn(`TRM ${rango}: la fuente respondió ${respuesta.status}`);
+        return null;
+      }
+      const trms = aTrms(await respuesta.json());
+      if (trms === null) this.logger.warn(`TRM ${rango}: respuesta con otra forma`);
+      return trms;
+    } catch (error) {
+      const motivo = error instanceof Error ? error.name : "desconocido";
+      this.logger.warn(`TRM ${rango}: no se pudo consultar la fuente (${motivo})`);
       return null;
     }
   }

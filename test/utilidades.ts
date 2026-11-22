@@ -16,6 +16,7 @@ import { expect } from "vitest";
 import { AppModule } from "../src/app.module.js";
 import { CATALOGO, crearPipeValidacion, type CodigoError } from "../src/comun/error-api.js";
 import type { CuentaDto } from "../src/cuentas/dto.js";
+import { TrmFuente } from "../src/repositories/datos-gov/trm.fuente.js";
 
 const url = process.env.SUPABASE_URL;
 const clavePublicable = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -30,9 +31,22 @@ export type UsuarioPrueba = { id: string; token: string; cliente: SupabaseClient
 /** Proveedor reemplazado en la app de prueba (p. ej. `TrmFuente` por una falsa, SPEC 09). */
 export type Reemplazo = { proveedor: Type | string | symbol; valor: unknown };
 
+/**
+ * Fuente de TRM que siempre falla: ninguna e2e sale a datos.gov.co. `GET /cuentas`
+ * y `/inversiones` piden la TRM de hoy (SPEC 10); quien la necesite pasa la suya.
+ */
+const FUENTE_TRM_SIN_RED = {
+  obtenerEn: () => Promise.resolve(null),
+  obtenerRango: () => Promise.resolve(null),
+};
+
 export async function crearApp(reemplazos: Reemplazo[] = []): Promise<INestApplication<App>> {
   const constructor = Test.createTestingModule({ imports: [AppModule] });
-  for (const { proveedor, valor } of reemplazos) {
+  const conFuente = reemplazos.some((r) => r.proveedor === TrmFuente);
+  const todos = conFuente
+    ? reemplazos
+    : [...reemplazos, { proveedor: TrmFuente, valor: FUENTE_TRM_SIN_RED }];
+  for (const { proveedor, valor } of todos) {
     constructor.overrideProvider(proveedor).useValue(valor);
   }
   const modulo = await constructor.compile();

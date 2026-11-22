@@ -2,7 +2,8 @@
  * Tipos del resumen del mes (SPEC 06). Montos en unidades menores, `bigint`.
  * Los porcentajes son enteros en décimas (274 = 27,4 %), sin coma flotante.
  */
-import type { TipoCuentaConPrestamo } from "../cuenta/cuenta.js";
+import type { TipoCuentaGuardada } from "../cuenta/cuenta.js";
+import type { Activo, Moneda, Operacion, Precio } from "../inversion/inversion.js";
 import type { TipoMovimiento } from "../movimiento/movimiento.js";
 
 export type Comparacion = {
@@ -31,11 +32,16 @@ export type ResumenMes = {
 
 export type PuntoPatrimonio = { fecha: string; patrimonio: bigint };
 
-/** Lo mínimo de un movimiento para el resumen. `monto` siempre positivo; `fecha` "YYYY-MM-DD". */
+/**
+ * Lo mínimo de un movimiento para el resumen. `monto` siempre positivo; `fecha`
+ * "YYYY-MM-DD". `montoDestino`: lo que llegó al destino en una transferencia
+ * entre monedas (SPEC 10), o `null`.
+ */
 export type MovimientoResumen = {
   id: string;
   tipo: TipoMovimiento;
   monto: bigint;
+  montoDestino: bigint | null;
   fecha: string;
   cuentaOrigenId: string | null;
   cuentaDestinoId: string | null;
@@ -45,14 +51,23 @@ export type MovimientoResumen = {
 export type ParteResumen = { movimientoId: string; categoriaId: string; monto: bigint };
 
 /**
- * Cuenta para el patrimonio, archivadas y préstamos incluidos (SPEC 08).
- * `creadaEl`: día local de `creado_en`.
+ * Cuenta para el patrimonio, archivadas, préstamos (SPEC 08) e inversiones
+ * (SPEC 10) incluidos. `creadaEl`: día local de `creado_en`. Montos en la
+ * moneda de la cuenta.
  */
 export type CuentaPatrimonio = {
   id: string;
-  tipo: TipoCuentaConPrestamo;
+  tipo: TipoCuentaGuardada;
+  moneda: Moneda;
   saldoInicial: bigint;
   creadaEl: string;
+};
+
+/** Activos, operaciones y precios de una cuenta de inversión (SPEC 10). */
+export type InversionPatrimonio = {
+  activos: readonly Activo[];
+  operaciones: readonly Operacion[];
+  precios: readonly Precio[];
 };
 
 /** Cambio de saldo inicial (`cuentas_cambios`). `fecha`: día local de `cambiado_en`. */
@@ -64,11 +79,18 @@ export type CambioSaldoInicial = {
   fecha: string;
 };
 
-/** Todo lo que necesita el cálculo del patrimonio a una fecha. */
+/**
+ * Todo lo que necesita el cálculo del patrimonio a una fecha.
+ * `inversiones`: por id de cuenta; ausente = sin inversiones (SPEC 10).
+ * `trm`: fecha → TRM en centavos de peso, o `null` si no se obtuvo; la llena
+ * `TrmService.enFechas` con las fechas de `fechasConTrm`.
+ */
 export type DatosPatrimonio = {
   cuentas: readonly CuentaPatrimonio[];
   cambios: readonly CambioSaldoInicial[];
   movimientos: readonly MovimientoResumen[];
+  inversiones?: ReadonlyMap<string, InversionPatrimonio>;
+  trm?: ReadonlyMap<string, bigint | null>;
 };
 
 export type CambioDelMes = {
@@ -76,6 +98,8 @@ export type CambioDelMes = {
   fechaCierre: string;
   patrimonioAnterior: bigint;
   resultado: bigint;
+  /** Revaluación de las inversiones (SPEC 10): precio, dólar y ganancia realizada. */
+  revaluacion: bigint;
   otrosCambios: bigint;
   patrimonioCierre: bigint;
 };

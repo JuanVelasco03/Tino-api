@@ -2,13 +2,18 @@
  * Contrato HTTP de movimientos. El monto viaja positivo como string de entero
  * en unidades menores; el signo por tipo lo pone el cliente.
  */
+import type { Moneda } from "../domain/inversion/inversion.js";
 import type { Movimiento, Ref, TipoMovimiento } from "../domain/movimiento/movimiento.js";
 
 export type MovimientoDto = {
   id: string;
   tipo: TipoMovimiento;
   monto: string;
-  moneda: "COP";
+  /** La del origen, o la del destino en un ingreso (SPEC 10). */
+  moneda: Moneda;
+  /** Lo que llegó al destino en una transferencia entre monedas, en su moneda; si no, null. */
+  montoDestino: string | null;
+  /** La implícita (COP por US$ 1) entre monedas, o "1". */
   tasa: string;
   fecha: string;
   descripcion: string | null;
@@ -30,6 +35,7 @@ export function aMovimientoDto(m: Movimiento): MovimientoDto {
     tipo: m.tipo,
     monto: m.monto.toString(),
     moneda: m.moneda,
+    montoDestino: m.montoDestino === null ? null : m.montoDestino.toString(),
     tasa: m.tasa,
     fecha: m.fecha,
     descripcion: m.descripcion,

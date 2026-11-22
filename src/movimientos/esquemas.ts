@@ -13,6 +13,14 @@ const monto = z
   .regex(/^\d{1,19}$/, { error: "MONTO_INVALIDO" })
   .transform((m) => BigInt(m));
 
+/** Lo que llegó al destino entre monedas (SPEC 10). Ausente o null → null; mal formado → MONTO_INVALIDO. */
+const montoDestino = z
+  .string({ error: "MONTO_INVALIDO" })
+  .regex(/^\d{1,19}$/, { error: "MONTO_INVALIDO" })
+  .transform((m) => BigInt(m))
+  .nullish()
+  .transform((m) => m ?? null);
+
 const fecha = z
   .string({ error: "FECHA_INVALIDA" })
   .refine(esFechaValida, { error: "FECHA_INVALIDA" });
@@ -47,6 +55,7 @@ const partes = z
 const campos = {
   tipo: z.enum(TIPOS_MOVIMIENTO, { error: "TIPO_MOVIMIENTO_INVALIDO" }),
   monto,
+  montoDestino,
   descripcion: textoOpcional(80, "DESCRIPCION_LARGA"),
   nota: textoOpcional(500, "NOTA_LARGA"),
   cuentaOrigenId: idOpcional,

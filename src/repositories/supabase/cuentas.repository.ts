@@ -11,6 +11,9 @@
  * las lecturas y escrituras de este repositorio las excluyen, así que un
  * préstamo en `/cuentas/:id` es una cuenta inexistente. Solo
  * `listarPrestamos` las lee, para que el servicio las sume al patrimonio.
+ *
+ * Inversiones (SPEC 10): sí son cuentas visibles, con su `moneda`. Nacen en
+ * `crear_inversion` (`InversionesRepository`), no aquí.
  */
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
@@ -18,12 +21,14 @@ import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import type { UsuarioAutenticado } from "../../autenticacion/usuario.js";
 import { ErrorApi } from "../../comun/error-api.js";
 import {
-  TIPOS_EN_ALCANCE,
+  TIPOS_VISIBLES,
   type CuentaGuardada,
   type TipoCuentaEnAlcance,
+  type TipoCuentaVisible,
 } from "../../domain/cuenta/cuenta.js";
 import type { Naturaleza } from "../../domain/cuenta/naturaleza.js";
 import type { EfectoMovimiento } from "../../domain/cuenta/saldo.js";
+import { esMoneda, type Moneda } from "../../domain/inversion/inversion.js";
 import {
   TIPOS_PRESTAMO,
   esTipoPrestamo,
@@ -31,9 +36,13 @@ import {
 } from "../../domain/prestamo/prestamo.js";
 import { CifradorMontos, contexto } from "../cifrado/montos.js";
 import { ClienteSupabase } from "./cliente.js";
+import { desdeFuncion } from "./errores.js";
 import type { Database, TablesInsert, TablesUpdate } from "./tipos.js";
 
-const COLUMNAS = "id, nombre, tipo, detalle, saldo_inicial, cupo, posicion, archivada_en";
+const COLUMNAS = "id, nombre, tipo, moneda, detalle, saldo_inicial, cupo, posicion, archivada_en";
+
+/** Efecto de un movimiento con su id y fecha, para la línea de tiempo de una inversión (SPEC 10). */
+export type EfectoConFecha = EfectoMovimiento & { id: string; fecha: string };
 
 /** Lista de PostgREST para `.not("tipo", "in", …)`: excluye los préstamos. */
 const TIPOS_DE_PRESTAMO = `(${TIPOS_PRESTAMO.join(",")})`;
@@ -42,6 +51,7 @@ type Fila = {
   id: string;
   nombre: string;
   tipo: string;
+  moneda: string;
   detalle: string | null;
   saldo_inicial: string;
   cupo: string | null;
@@ -65,10 +75,15 @@ export type DatosEdicion = {
   cupo?: bigint;
 };
 
-function aTipo(valor: string): TipoCuentaEnAlcance {
-  const tipo = TIPOS_EN_ALCANCE.find((t) => t === valor);
+function aTipo(valor: string): TipoCuentaVisible {
+  const tipo = TIPOS_VISIBLES.find((t) => t === valor);
   if (!tipo) throw new Error(`Tipo de cuenta desconocido: ${valor}`);
   return tipo;
+}
+
+function aMoneda(valor: string): Moneda {
+  if (!esMoneda(valor)) throw new Error(`Moneda desconocida: ${valor}`);
+  return valor;
 }
 
 /** Traduce el error de Postgres a un código del catálogo; si no, error interno sin filtrar detalle. */
@@ -76,12 +91,9 @@ function traducir(error: PostgrestError): Error {
   if (error.code === "23505" && error.message.includes("cuentas_nombre_unico")) {
     return new ErrorApi("NOMBRE_DUPLICADO");
   }
-  if (error.code === "P0001" && error.message === "CAMBIO_DE_NATURALEZA") {
-    return new ErrorApi("CAMBIO_DE_NATURALEZA");
-  }
-  if (error.code === "P0001" && error.message === "ORDEN_INVALIDO") {
-    return new ErrorApi("ORDEN_INVALIDO");
-  }
+  // CAMBIO_DE_NATURALEZA, ORDEN_INVALIDO, TIPO_DE_INVERSION_FIJO, MONEDA_FIJA…
+  const deFuncion = desdeFuncion(error);
+  if (deFuncion) return deFuncion;
   // El filtro lo convierte en ERROR_INTERNO; el detalle solo va al log.
   return new Error(`Postgres ${error.code}: ${error.message}`);
 }
@@ -102,6 +114,7 @@ export class CuentasRepository {
       id: fila.id,
       nombre: fila.nombre,
       tipo: aTipo(fila.tipo),
+      moneda: aMoneda(fila.moneda),
       detalle: fila.detalle,
       saldoInicial: this.cifrador.descifrar(
         fila.saldo_inicial,
@@ -154,13 +167,14 @@ export class CuentasRepository {
   }
 
   /**
-   * Monto y cuentas de los movimientos del usuario (RLS), descifrados. Con
-   * `cuentaId`, solo los que la tocan. Trae lo mínimo: el saldo lo calcula el dominio.
+   * Montos, cuentas y fecha de los movimientos del usuario (RLS), descifrados.
+   * Con `cuentaId`, solo los que la tocan. Trae lo mínimo: el saldo lo calcula
+   * el dominio.
    */
-  async efectos(usuario: UsuarioAutenticado, cuentaId?: string): Promise<EfectoMovimiento[]> {
+  async efectos(usuario: UsuarioAutenticado, cuentaId?: string): Promise<EfectoConFecha[]> {
     let consulta = this.cliente(usuario.token)
       .from("movimientos")
-      .select("id, monto, cuenta_origen_id, cuenta_destino_id");
+      .select("id, monto, monto_destino, fecha, cuenta_origen_id, cuenta_destino_id");
     if (cuentaId !== undefined) {
       consulta = consulta.or(`cuenta_origen_id.eq.${cuentaId},cuenta_destino_id.eq.${cuentaId}`);
     }
@@ -170,11 +184,19 @@ export class CuentasRepository {
       data as unknown as {
         id: string;
         monto: string;
+        monto_destino: string | null;
+        fecha: string;
         cuenta_origen_id: string | null;
         cuenta_destino_id: string | null;
       }[]
     ).map((m) => ({
+      id: m.id,
       monto: this.cifrador.descifrar(m.monto, contexto.movimiento(usuario.id, m.id)),
+      montoDestino:
+        m.monto_destino === null
+          ? null
+          : this.cifrador.descifrar(m.monto_destino, contexto.montoDestino(usuario.id, m.id)),
+      fecha: m.fecha,
       cuentaOrigenId: m.cuenta_origen_id,
       cuentaDestinoId: m.cuenta_destino_id,
     }));

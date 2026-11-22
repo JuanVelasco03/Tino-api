@@ -1,6 +1,6 @@
 # SPEC 10 — Cuentas de inversión
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 03, SPEC 04, SPEC 05, SPEC 06, SPEC 07, SPEC 08, SPEC 09
 > **Fecha:** 2026-11-21
 > **Objetivo:** Que la API lleve cuentas de inversión en COP o USD, con efectivo, fondeo entre monedas, posiciones derivadas de operaciones de compra y venta, y precio manual, valoradas a mercado en Inversiones, Cuentas, el patrimonio y el puente del resumen.

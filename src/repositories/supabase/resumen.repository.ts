@@ -10,7 +10,8 @@
 import { Injectable } from "@nestjs/common";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UsuarioAutenticado } from "../../autenticacion/usuario.js";
-import { TIPOS_CON_PRESTAMO, type TipoCuentaConPrestamo } from "../../domain/cuenta/cuenta.js";
+import { TIPOS_GUARDADOS, type TipoCuentaGuardada } from "../../domain/cuenta/cuenta.js";
+import { esMoneda, type Moneda } from "../../domain/inversion/inversion.js";
 import { TIPOS_MOVIMIENTO, type TipoMovimiento } from "../../domain/movimiento/movimiento.js";
 import type { MovimientoResumen, ParteResumen } from "../../domain/resumen/resumen.js";
 import { CifradorMontos, contexto } from "../cifrado/montos.js";
@@ -18,10 +19,11 @@ import { ClienteSupabase } from "./cliente.js";
 import { errorInterno } from "./errores.js";
 import type { Database } from "./tipos.js";
 
-/** Cuenta tal como la lee el resumen: también las archivadas y los préstamos (SPEC 08). */
+/** Cuenta tal como la lee el resumen: también las archivadas, los préstamos (SPEC 08) y las inversiones (SPEC 10). */
 export type CuentaLeida = {
   id: string;
-  tipo: TipoCuentaConPrestamo;
+  tipo: TipoCuentaGuardada;
+  moneda: Moneda;
   saldoInicial: bigint;
   creadoEn: Date;
   archivadaEn: Date | null;
@@ -44,6 +46,7 @@ export type LecturaResumen = {
 type FilaCuenta = {
   id: string;
   tipo: string;
+  moneda: string;
   saldo_inicial: string;
   creado_en: string;
   archivada_en: string | null;
@@ -60,6 +63,7 @@ type FilaMovimiento = {
   id: string;
   tipo: string;
   monto: string;
+  monto_destino: string | null;
   fecha: string;
   cuenta_origen_id: string | null;
   cuenta_destino_id: string | null;
@@ -68,10 +72,15 @@ type FilaMovimiento = {
 
 type FilaParte = { movimiento_id: string; categoria_id: string; monto: string };
 
-function aTipoCuenta(valor: string): TipoCuentaConPrestamo {
-  const tipo = TIPOS_CON_PRESTAMO.find((t) => t === valor);
+function aTipoCuenta(valor: string): TipoCuentaGuardada {
+  const tipo = TIPOS_GUARDADOS.find((t) => t === valor);
   if (!tipo) throw new Error(`Tipo de cuenta desconocido: ${valor}`);
   return tipo;
+}
+
+function aMoneda(valor: string): Moneda {
+  if (!esMoneda(valor)) throw new Error(`Moneda desconocida: ${valor}`);
+  return valor;
 }
 
 function aTipoMovimiento(valor: string): TipoMovimiento {
@@ -109,11 +118,12 @@ export class ResumenRepository {
   ): Promise<CuentaLeida[]> {
     const { data, error } = await cliente
       .from("cuentas")
-      .select("id, tipo, saldo_inicial, creado_en, archivada_en");
+      .select("id, tipo, moneda, saldo_inicial, creado_en, archivada_en");
     if (error) throw errorInterno(error);
     return (data as FilaCuenta[]).map((f) => ({
       id: f.id,
       tipo: aTipoCuenta(f.tipo),
+      moneda: aMoneda(f.moneda),
       saldoInicial: this.cifrador.descifrar(
         f.saldo_inicial,
         contexto.cuenta(usuarioId, f.id, "saldo_inicial"),
@@ -150,12 +160,18 @@ export class ResumenRepository {
   ): Promise<MovimientoResumen[]> {
     const { data, error } = await cliente
       .from("movimientos")
-      .select("id, tipo, monto, fecha, cuenta_origen_id, cuenta_destino_id, categoria_id");
+      .select(
+        "id, tipo, monto, monto_destino, fecha, cuenta_origen_id, cuenta_destino_id, categoria_id",
+      );
     if (error) throw errorInterno(error);
     return (data as FilaMovimiento[]).map((f) => ({
       id: f.id,
       tipo: aTipoMovimiento(f.tipo),
       monto: this.cifrador.descifrar(f.monto, contexto.movimiento(usuarioId, f.id)),
+      montoDestino:
+        f.monto_destino === null
+          ? null
+          : this.cifrador.descifrar(f.monto_destino, contexto.montoDestino(usuarioId, f.id)),
       fecha: f.fecha,
       cuentaOrigenId: f.cuenta_origen_id,
       cuentaDestinoId: f.cuenta_destino_id,

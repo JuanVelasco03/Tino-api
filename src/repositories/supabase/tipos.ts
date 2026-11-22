@@ -44,6 +44,7 @@ export type Database = {
           cupo: string | null;
           detalle: string | null;
           id: string;
+          moneda: string;
           nombre: string;
           posicion: number;
           saldo_inicial: string;
@@ -57,6 +58,7 @@ export type Database = {
           cupo?: string | null;
           detalle?: string | null;
           id?: string;
+          moneda?: string;
           nombre: string;
           posicion: number;
           saldo_inicial: string;
@@ -70,6 +72,7 @@ export type Database = {
           cupo?: string | null;
           detalle?: string | null;
           id?: string;
+          moneda?: string;
           nombre?: string;
           posicion?: number;
           saldo_inicial?: string;
@@ -120,6 +123,163 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "prestamos_detalle";
             referencedColumns: ["id"];
+          },
+        ];
+      };
+      inversion_activos: {
+        Row: {
+          creado_en: string;
+          cuenta_id: string;
+          id: string;
+          nombre: string;
+          simbolo: string;
+          usuario_id: string;
+        };
+        Insert: {
+          creado_en?: string;
+          cuenta_id: string;
+          id?: string;
+          nombre: string;
+          simbolo: string;
+          usuario_id?: string;
+        };
+        Update: {
+          creado_en?: string;
+          cuenta_id?: string;
+          id?: string;
+          nombre?: string;
+          simbolo?: string;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inversion_activos_cuenta_fkey";
+            columns: ["usuario_id", "cuenta_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+        ];
+      };
+      inversion_operaciones: {
+        Row: {
+          activo_id: string;
+          actualizado_en: string;
+          cantidad: string;
+          clase: string;
+          creado_en: string;
+          cuenta_id: string;
+          fecha: string;
+          id: string;
+          monto: string;
+          usuario_id: string;
+        };
+        Insert: {
+          activo_id: string;
+          actualizado_en?: string;
+          cantidad: string;
+          clase: string;
+          creado_en?: string;
+          cuenta_id: string;
+          fecha: string;
+          id: string;
+          monto: string;
+          usuario_id?: string;
+        };
+        Update: {
+          activo_id?: string;
+          actualizado_en?: string;
+          cantidad?: string;
+          clase?: string;
+          creado_en?: string;
+          cuenta_id?: string;
+          fecha?: string;
+          id?: string;
+          monto?: string;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inversion_operaciones_activo_fkey";
+            columns: ["usuario_id", "cuenta_id", "activo_id"];
+            isOneToOne: false;
+            referencedRelation: "inversion_activos";
+            referencedColumns: ["usuario_id", "cuenta_id", "id"];
+          },
+          {
+            foreignKeyName: "inversion_operaciones_cuenta_fkey";
+            columns: ["usuario_id", "cuenta_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+        ];
+      };
+      inversion_operaciones_cambios: {
+        Row: {
+          antes: Json;
+          cambiado_en: string;
+          despues: Json | null;
+          id: string;
+          operacion: string;
+          operacion_id: string;
+          usuario_id: string;
+        };
+        Insert: {
+          antes: Json;
+          cambiado_en?: string;
+          despues?: Json | null;
+          id?: string;
+          operacion: string;
+          operacion_id: string;
+          usuario_id: string;
+        };
+        Update: {
+          antes?: Json;
+          cambiado_en?: string;
+          despues?: Json | null;
+          id?: string;
+          operacion?: string;
+          operacion_id?: string;
+          usuario_id?: string;
+        };
+        Relationships: [];
+      };
+      inversion_precios: {
+        Row: {
+          activo_id: string;
+          cotizado_en: string;
+          fecha: string;
+          id: string;
+          origen: string;
+          precio_cent: number;
+          usuario_id: string;
+        };
+        Insert: {
+          activo_id: string;
+          cotizado_en?: string;
+          fecha: string;
+          id?: string;
+          origen?: string;
+          precio_cent: number;
+          usuario_id?: string;
+        };
+        Update: {
+          activo_id?: string;
+          cotizado_en?: string;
+          fecha?: string;
+          id?: string;
+          origen?: string;
+          precio_cent?: number;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inversion_precios_activo_fkey";
+            columns: ["usuario_id", "activo_id"];
+            isOneToOne: false;
+            referencedRelation: "inversion_activos";
+            referencedColumns: ["usuario_id", "id"];
           },
         ];
       };
@@ -181,6 +341,7 @@ export type Database = {
           id: string;
           moneda: string;
           monto: string;
+          monto_destino: string | null;
           nota: string | null;
           tasa: number;
           tipo: string;
@@ -197,6 +358,7 @@ export type Database = {
           id?: string;
           moneda?: string;
           monto: string;
+          monto_destino?: string | null;
           nota?: string | null;
           tasa?: number;
           tipo: string;
@@ -213,6 +375,7 @@ export type Database = {
           id?: string;
           moneda?: string;
           monto?: string;
+          monto_destino?: string | null;
           nota?: string | null;
           tasa?: number;
           tipo?: string;
@@ -682,6 +845,7 @@ export type Database = {
           id: string | null;
           moneda: string | null;
           monto: string | null;
+          monto_destino: string | null;
           nota: string | null;
           partes: Json | null;
           tasa: number | null;
@@ -801,6 +965,16 @@ export type Database = {
         };
         Returns: string;
       };
+      crear_inversion: {
+        Args: {
+          p_cuenta_id: string;
+          p_moneda: string;
+          p_nombre: string;
+          p_posiciones: Json;
+          p_saldo_inicial: string;
+        };
+        Returns: string;
+      };
       crear_prestamo: {
         Args: {
           p_cuenta_id: string;
@@ -820,6 +994,16 @@ export type Database = {
       eliminar_movimiento: { Args: { p_id: string }; Returns: undefined };
       foto_movimiento: { Args: { p_id: string }; Returns: Json };
       insertar_semilla: { Args: { p_usuario: string }; Returns: undefined };
+      moneda_de_movimiento: {
+        Args: {
+          p_cuenta_destino_id: string;
+          p_cuenta_origen_id: string;
+          p_monto_destino: string;
+          p_tipo: string;
+          p_usuario: string;
+        };
+        Returns: string;
+      };
       naturaleza_de: { Args: { tipo: string }; Returns: string };
       partes_o_vacio: { Args: { p_partes: Json }; Returns: Json };
       reemplazar_movimiento: {
@@ -831,8 +1015,10 @@ export type Database = {
           p_fecha: string;
           p_id: string;
           p_monto: string;
+          p_monto_destino?: string;
           p_nota: string;
           p_partes: Json;
+          p_tasa?: number;
           p_tipo: string;
         };
         Returns: string;
@@ -861,9 +1047,26 @@ export type Database = {
           p_fecha: string;
           p_id: string;
           p_monto: string;
+          p_monto_destino?: string;
           p_nota: string;
           p_partes: Json;
+          p_tasa?: number;
           p_tipo: string;
+        };
+        Returns: string;
+      };
+      registrar_operacion: {
+        Args: {
+          p_activo_id: string;
+          p_cantidad: string;
+          p_clase: string;
+          p_cuenta_id: string;
+          p_fecha: string;
+          p_monto: string;
+          p_nombre: string;
+          p_operacion_id: string;
+          p_precio_cent: number;
+          p_simbolo: string;
         };
         Returns: string;
       };

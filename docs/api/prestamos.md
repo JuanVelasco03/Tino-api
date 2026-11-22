@@ -1,6 +1,6 @@
 # Deudas y préstamos
 
-> **Spec de origen:** SPEC 08 · **Necesidades:** `specs/necesidades/deudas.md`
+> **Spec de origen:** SPEC 08 (`CUENTA_DE_INVERSION`: SPEC 10) · **Necesidades:** `specs/necesidades/deudas.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Préstamos con personas en los dos sentidos: lo que **te deben**
@@ -317,6 +317,7 @@ type PrestamoCuerpo = {
 | 409 | `PRESTAMO_EXISTENTE` | `nombre` | Ya hay un préstamo con esa persona en ese sentido (sin distinguir mayúsculas). Usar `POST /prestamos/:id/desembolsos`. |
 | 422 | `CUENTA_INVALIDA` | `cuentaId` | No existe, es de otro usuario o no es un UUID. |
 | 422 | `CUENTA_DE_PRESTAMO` | `cuentaId` | La cuenta es otro préstamo. |
+| 422 | `CUENTA_DE_INVERSION` | `cuentaId` | La cuenta es una inversión ([`inversiones.md`](inversiones.md)). |
 | 409 | `CUENTA_ARCHIVADA` | `cuentaId` | La cuenta está archivada. No se crea nada. |
 
 ---
@@ -332,7 +333,7 @@ type DesembolsoCuerpo = { monto: string; cuentaId: string; fecha?: string }; // 
 **201** `PrestamoDetalleDto`.
 
 Errores: `MONTO_REQUERIDO`, `MONTO_INVALIDO`, `FECHA_INVALIDA`,
-`CUENTA_INVALIDA`, `CUENTA_DE_PRESTAMO`, `CUENTA_ARCHIVADA` (como en el alta) y
+`CUENTA_INVALIDA`, `CUENTA_DE_PRESTAMO`, `CUENTA_DE_INVERSION`, `CUENTA_ARCHIVADA` (como en el alta) y
 `404 PRESTAMO_NO_ENCONTRADO`.
 
 ---
@@ -429,6 +430,7 @@ type AbonoCuerpo = {
 | 422 | `ABONO_EXCEDE_CAPITAL` | `capital` | El capital supera lo pendiente. |
 | 422 | `CUENTA_INVALIDA` | `cuentaId` | No existe o es de otro usuario. |
 | 422 | `CUENTA_DE_PRESTAMO` | `cuentaId` | La cuenta es un préstamo. |
+| 422 | `CUENTA_DE_INVERSION` | `cuentaId` | La cuenta es una inversión. |
 | 409 | `CUENTA_ARCHIVADA` | `cuentaId` | La cuenta está archivada. No se crea nada. |
 | 422 | `CATEGORIA_INVALIDA` | `categoriaInteresId` | No existe, es de otro usuario o es de otro tipo. |
 | 404 | `PRESTAMO_NO_ENCONTRADO` | — | No existe o es de otro usuario. |
@@ -501,6 +503,7 @@ creado. Deshacer es `DELETE /movimientos/:id` con su `id`.
 | `CONDONACION_NO_PERMITIDA` | 422 | — | Solo se condona lo que te deben. |
 | `CONDONACION_EXCEDE_CAPITAL` | 422 | `monto` | No puedes condonar más de lo pendiente. |
 | `CUENTA_DE_PRESTAMO` | 422 | la cuenta | Esa cuenta es un préstamo. Regístralo desde Deudas. |
+| `CUENTA_DE_INVERSION` | 422 | la cuenta | Esa cuenta es de inversión: solo admite transferencias y se maneja desde Inversiones. |
 | `MOVIMIENTO_DE_PRESTAMO` | 422 | `tipo` | Este movimiento es de un préstamo: no cambia de tipo ni de préstamo. |
 | `CAPITAL_NEGATIVO` | 422 | — | El cambio deja el préstamo con capital negativo. |
 

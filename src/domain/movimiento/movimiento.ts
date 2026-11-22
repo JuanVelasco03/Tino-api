@@ -1,3 +1,5 @@
+import type { Moneda } from "../inversion/inversion.js";
+
 export const TIPOS_MOVIMIENTO = ["gasto", "ingreso", "transferencia"] as const;
 
 export type TipoMovimiento = (typeof TIPOS_MOVIMIENTO)[number];
@@ -9,6 +11,11 @@ export type MovimientoEntrada = {
   tipo: TipoMovimiento;
   /** > 0. Siempre positivo: el efecto en el saldo lo da la naturaleza de la cuenta (RN-02). */
   monto: bigint;
+  /**
+   * Lo que llegó al destino en una transferencia entre monedas distintas, en la
+   * moneda del destino (SPEC 10). `null` con la misma moneda.
+   */
+  montoDestino: bigint | null;
   /** "YYYY-MM-DD"; null = hoy en la zona del usuario. */
   fecha: string | null;
   descripcion: string | null;
@@ -26,8 +33,14 @@ export type Movimiento = {
   id: string;
   tipo: TipoMovimiento;
   monto: bigint;
-  moneda: "COP";
-  /** Decimal exacto como texto ("1"): nunca pasa por number (RN-04). */
+  /** La de la cuenta de origen, o la del destino en un ingreso. La fija la base. */
+  moneda: Moneda;
+  /** En la moneda del destino; solo en una transferencia entre monedas (SPEC 10). */
+  montoDestino: bigint | null;
+  /**
+   * Decimal exacto como texto ("1"; la implícita en COP por US$ 1 entre
+   * monedas): nunca pasa por number (RN-04).
+   */
   tasa: string;
   fecha: string;
   descripcion: string | null;

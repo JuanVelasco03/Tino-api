@@ -1,6 +1,6 @@
 import { Logger } from "@nestjs/common";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { aTrm, TrmFuente, urlEn } from "./trm.fuente.js";
+import { aTrm, aTrms, TrmFuente, urlEn, urlRango } from "./trm.fuente.js";
 
 /** Filas reales de la fuente, citadas en SPEC 09. */
 const filaFinDeSemana = {
@@ -42,6 +42,45 @@ describe("aTrm", () => {
     ["null", null],
   ])("%s → null", (_caso, json) => {
     expect(aTrm(json)).toBeNull();
+  });
+});
+
+describe("aTrms (SPEC 10)", () => {
+  const lunes = {
+    valor: "3470.10",
+    unidad: "COP",
+    vigenciadesde: "2026-11-24T00:00:00.000",
+    vigenciahasta: "2026-11-24T00:00:00.000",
+  };
+
+  it("convierte todas las filas, en orden", () => {
+    expect(aTrms([filaFinDeSemana, lunes])).toEqual([
+      { valorCent: 346192n, vigenteDesde: "2026-11-21", vigenteHasta: "2026-11-23" },
+      { valorCent: 347010n, vigenteDesde: "2026-11-24", vigenteHasta: "2026-11-24" },
+    ]);
+  });
+
+  it("una lista vacía es válida: no hay filas en el rango", () => {
+    expect(aTrms([])).toEqual([]);
+  });
+
+  it.each([
+    ["una fila inválida", [filaFinDeSemana, { ...lunes, valor: "x" }]],
+    ["no es lista", filaFinDeSemana],
+    ["null", null],
+  ])("%s → null", (_caso, json) => {
+    expect(aTrms(json)).toBeNull();
+  });
+});
+
+describe("urlRango", () => {
+  it("pide las filas que se cruzan con el rango, ordenadas", () => {
+    const url = new URL(urlRango("2026-10-31", "2026-11-30"));
+    expect(url.searchParams.get("$where")).toBe(
+      "vigenciahasta >= '2026-10-31T00:00:00.000' AND vigenciadesde <= '2026-11-30T00:00:00.000'",
+    );
+    expect(url.searchParams.get("$order")).toBe("vigenciadesde");
+    expect(url.searchParams.get("$limit")).toBe("1000");
   });
 });
 
@@ -95,6 +134,42 @@ describe("TrmFuente.obtenerEn", () => {
   ])("%s → null con aviso", async (_caso, respuesta) => {
     fetchFalso.mockImplementation(respuesta);
     expect(await fuente.obtenerEn("2026-11-22")).toBeNull();
+    expect(aviso).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("TrmFuente.obtenerRango", () => {
+  const fuente = new TrmFuente();
+  const fetchFalso = vi.fn<typeof fetch>();
+  let aviso: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchFalso);
+    aviso = vi.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    fetchFalso.mockReset();
+  });
+
+  it("una sola consulta por el rango, con timeout", async () => {
+    fetchFalso.mockResolvedValue(Response.json([filaFinDeSemana]));
+    expect(await fuente.obtenerRango("2026-11-20", "2026-11-23")).toHaveLength(1);
+    expect(fetchFalso).toHaveBeenCalledTimes(1);
+    const [url, opciones] = fetchFalso.mock.calls[0]!;
+    expect(url).toBe(urlRango("2026-11-20", "2026-11-23"));
+    expect(opciones?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it.each([
+    ["estado 500", () => Promise.resolve(new Response("caída", { status: 500 }))],
+    ["error de red", () => Promise.reject(new TypeError("fetch failed"))],
+    ["forma inválida", () => Promise.resolve(Response.json({ error: true }))],
+  ])("%s → null con aviso", async (_caso, respuesta) => {
+    fetchFalso.mockImplementation(respuesta);
+    expect(await fuente.obtenerRango("2026-11-20", "2026-11-23")).toBeNull();
     expect(aviso).toHaveBeenCalledTimes(1);
   });
 });

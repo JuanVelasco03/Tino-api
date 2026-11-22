@@ -1,6 +1,6 @@
 # Resumen del mes
 
-> **Spec de origen:** SPEC 06 (préstamos en el patrimonio: SPEC 08) · **Necesidades:** `specs/necesidades/resumen.md`
+> **Spec de origen:** SPEC 06 (préstamos en el patrimonio: SPEC 08; inversiones a mercado y `revaluacion`: SPEC 10) · **Necesidades:** `specs/necesidades/resumen.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Cifras de un mes comparadas con el anterior: ingresos, gastos, resultado y
@@ -9,8 +9,8 @@ puente del patrimonio del mes. **Todo lo calcula la API.** El cliente muestra
 las cifras, las variaciones y los porcentajes tal como llegan, sin
 recalcularlos.
 
-**Todavía no:** USD y TRM, revaluación de inversiones, ajustes de saldo, otros
-informes (series por categoría, rangos libres, exportar).
+**Todavía no:** ajustes de saldo, otros informes (series por categoría, rangos
+libres, exportar).
 
 ---
 
@@ -90,7 +90,8 @@ type ResumenDto = {
     fechaCierre: string;             // último día de M
     patrimonioAnterior: string;
     resultado: string;               // = resultado.actual
-    otrosCambios: string;            // cierre − anterior − resultado
+    revaluacion: string;             // de las inversiones (SPEC 10); puede ser negativa
+    otrosCambios: string;            // cierre − anterior − resultado − revaluacion
     patrimonioCierre: string;
   };
 };
@@ -139,6 +140,7 @@ type ResumenDto = {
     "fechaCierre": "2026-11-30",
     "patrimonioAnterior": "2580000",
     "resultado": "-300000",
+    "revaluacion": "0",
     "otrosCambios": "0",
     "patrimonioCierre": "2280000"
   }
@@ -183,6 +185,10 @@ El patrimonio a una fecha se **calcula en cada consulta**, nunca se guarda
 - **Préstamos** (SPEC 08): cada préstamo es una cuenta y entra igual. Lo que te
   deben suma y lo que debes resta. Los intereses causados no se suman (ver
   [`prestamos.md`](prestamos.md)).
+- **Inversiones** (SPEC 10): cada una aporta su **valor de mercado en COP** en
+  esa fecha (efectivo + posiciones al precio vigente), con la TRM de esa
+  fecha si es USD. Una inversión USD sin TRM nunca obtenida aporta 0. Comprar,
+  vender y fondear no son ingreso ni gasto: el `resultado` no cambia.
 
 `serie`: el patrimonio al último día de cada uno de los 11 meses anteriores al
 **mes actual** (no al mes consultado), más el de hoy. Se omiten los puntos
@@ -194,13 +200,18 @@ también los de fecha futura. Con movimientos futuros, las dos cifras difieren.
 
 ### Puente del mes (`cambioDelMes`)
 
-`patrimonioAnterior + resultado + otrosCambios = patrimonioCierre`, siempre.
+`patrimonioAnterior + resultado + revaluacion + otrosCambios = patrimonioCierre`, siempre.
 
 - `patrimonioAnterior`: patrimonio al último día del mes anterior.
 - `patrimonioCierre`: patrimonio al último día del mes consultado. En el mes
   actual coincide con hoy, salvo movimientos con fecha futura dentro del mes.
   El cliente lo rotula «a hoy».
-- `otrosCambios` es el residuo. Recoge los saldos iniciales de cuentas creadas
+- `revaluacion` (SPEC 10): lo que cambió el valor de las inversiones por
+  precio, por el dólar y por la ganancia realizada en ventas. Es la variación
+  de su valor en COP menos lo que se les llevó o sacó en el mes
+  (transferencias, por su lado COP) y menos lo que ya se tenía al crearlas
+  (efectivo inicial y operaciones `inicial`). Sin inversiones, `"0"`.
+- `otrosCambios` es el residuo, sin la revaluación. Recoge los saldos iniciales de cuentas creadas
   en el mes, las ediciones de saldo inicial del mes y los movimientos fechados
   antes de crear su cuenta. Los saldos iniciales no son movimientos: nunca
   entran en ingresos ni gastos.

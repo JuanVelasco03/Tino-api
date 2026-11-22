@@ -1,6 +1,6 @@
 # Perfil
 
-> **Spec de origen:** SPEC 02 (cuenta predeterminada: SPEC 04) · Convenciones
+> **Spec de origen:** SPEC 02 (cuenta predeterminada: SPEC 04; `CUENTA_DE_INVERSION`: SPEC 10) · Convenciones
 > comunes en [`README.md`](README.md).
 
 El perfil se crea solo, por trigger, al registrarse el usuario. Lo único que
@@ -65,6 +65,7 @@ type EdicionPerfil = {
 | 400 | `ENTRADA_INVALIDA` | `cuentaPredeterminadaId` | Falta o no es un UUID. |
 | 422 | `CUENTA_INVALIDA` | `cuentaPredeterminadaId` | La cuenta no existe o es de otro usuario. |
 | 409 | `CUENTA_ARCHIVADA` | `cuentaPredeterminadaId` | La cuenta está archivada. |
+| 422 | `CUENTA_DE_INVERSION` | `cuentaPredeterminadaId` | La cuenta es una inversión: no admite gastos ni ingresos. |
 | 404 | `ENTRADA_INVALIDA` | — | El usuario no tiene perfil. |
 
 La moneda base no se cambia por la API. En la base, cambiarla con movimientos

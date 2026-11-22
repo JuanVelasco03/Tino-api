@@ -2,20 +2,38 @@
  * Contrato HTTP de cuentas. Todo monto viaja como string de entero en
  * unidades menores; el saldo de un pasivo va positivo (deuda vigente) y el
  * signo «−» lo pone el cliente.
+ *
+ * Inversiones (SPEC 10): `saldo` es el valor de mercado en COP; `saldoInicial`
+ * y el bloque `inversion`, en la moneda de la cuenta.
  */
-import type { Cuenta, GrupoCuentas, ResumenCuentas } from "../domain/cuenta/cuenta.js";
+import type {
+  Cuenta,
+  GrupoCuentas,
+  ResumenCuentas,
+  TipoCuentaVisible,
+} from "../domain/cuenta/cuenta.js";
 import { cupoDisponible, porcentajeUsado } from "../domain/cuenta/cupo.js";
 import { naturalezaDe, type Naturaleza } from "../domain/cuenta/naturaleza.js";
+import type { Moneda } from "../domain/inversion/inversion.js";
+import type { TrmResuelta } from "../domain/trm/trm.js";
+import { formatearValor } from "../domain/trm/valor.js";
+import { aTrmDto, type TrmDto } from "../trm/dto.js";
 
 export type CuentaDto = {
   id: string;
   nombre: string;
-  tipo: "efectivo" | "banco" | "tarjeta_credito";
+  tipo: TipoCuentaVisible;
+  /** "COP" salvo en una inversión en dólares. */
+  moneda: Moneda;
   naturaleza: Naturaleza;
   detalle: string | null;
+  /** En una inversión, su valor de mercado en COP ("0" si es USD y no hay TRM). */
   saldo: string;
+  /** En una inversión, el efectivo inicial en su moneda. */
   saldoInicial: string;
   tarjeta: { cupo: string; disponible: string; porcentajeUsado: number } | null;
+  /** Solo en una inversión, en su moneda. `tasa`: la TRM aplicada, o null en COP o sin TRM. */
+  inversion: { efectivo: string; valorMercado: string; tasa: string | null } | null;
   archivadaEn: string | null;
 };
 
@@ -29,6 +47,9 @@ export type ListaCuentasDto = {
   prestamos: { teDeben: string; debes: string };
   /** activos − pasivos + prestamos.teDeben − prestamos.debes. */
   patrimonioNeto: string;
+  /** TRM de hoy (SPEC 09, N-74); null si nunca se obtuvo. */
+  trm: TrmDto | null;
+  trmDesactualizada: boolean;
 };
 
 export function aCuentaDto(cuenta: Cuenta): CuentaDto {
@@ -36,6 +57,7 @@ export function aCuentaDto(cuenta: Cuenta): CuentaDto {
     id: cuenta.id,
     nombre: cuenta.nombre,
     tipo: cuenta.tipo,
+    moneda: cuenta.moneda,
     naturaleza: naturalezaDe(cuenta.tipo),
     detalle: cuenta.detalle,
     saldo: cuenta.saldo.toString(),
@@ -48,6 +70,15 @@ export function aCuentaDto(cuenta: Cuenta): CuentaDto {
             disponible: cupoDisponible(cuenta.cupo, cuenta.saldo).toString(),
             porcentajeUsado: porcentajeUsado(cuenta.cupo, cuenta.saldo),
           },
+    inversion:
+      cuenta.inversion === null
+        ? null
+        : {
+            efectivo: cuenta.inversion.efectivo.toString(),
+            valorMercado: cuenta.inversion.valorMercado.toString(),
+            tasa:
+              cuenta.inversion.trmCent === null ? null : formatearValor(cuenta.inversion.trmCent),
+          },
     archivadaEn: cuenta.archivadaEn === null ? null : cuenta.archivadaEn.toISOString(),
   };
 }
@@ -56,7 +87,11 @@ function aGrupoDto(grupo: GrupoCuentas): GrupoCuentasDto {
   return { total: grupo.total.toString(), cuentas: grupo.cuentas.map(aCuentaDto) };
 }
 
-export function aListaCuentasDto(resumen: ResumenCuentas, fechaSaldos: string): ListaCuentasDto {
+export function aListaCuentasDto(
+  resumen: ResumenCuentas,
+  fechaSaldos: string,
+  trm: TrmResuelta,
+): ListaCuentasDto {
   return {
     fechaSaldos,
     activos: aGrupoDto(resumen.activos),
@@ -66,5 +101,7 @@ export function aListaCuentasDto(resumen: ResumenCuentas, fechaSaldos: string): 
       debes: resumen.prestamos.debes.toString(),
     },
     patrimonioNeto: resumen.patrimonioNeto.toString(),
+    trm: trm.trm === null ? null : aTrmDto(trm.trm),
+    trmDesactualizada: trm.desactualizada,
   };
 }

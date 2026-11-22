@@ -69,6 +69,9 @@ export type ResumenDto = {
     fechaCierre: string;
     patrimonioAnterior: string;
     resultado: string;
+    /** Revaluación de las inversiones (SPEC 10): precio, dólar y ganancia realizada. Puede ser negativa. */
+    revaluacion: string;
+    /** Excluye la revaluación. */
     otrosCambios: string;
     patrimonioCierre: string;
   };
@@ -122,6 +125,7 @@ export function aCambioDelMesDto(c: CambioDelMes): ResumenDto["cambioDelMes"] {
     fechaCierre: c.fechaCierre,
     patrimonioAnterior: c.patrimonioAnterior.toString(),
     resultado: c.resultado.toString(),
+    revaluacion: c.revaluacion.toString(),
     otrosCambios: c.otrosCambios.toString(),
     patrimonioCierre: c.patrimonioCierre.toString(),
   };

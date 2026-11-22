@@ -12,7 +12,9 @@ export type CodigoErrorMovimiento =
   | "PARTES_CON_CATEGORIA"
   | "PARTES_INSUFICIENTES"
   | "PARTES_REPETIDAS"
-  | "PARTES_NO_SUMAN";
+  | "PARTES_NO_SUMAN"
+  | "MONTO_INVALIDO"
+  | "MONTO_DESTINO_NO_PERMITIDO";
 
 export type ErrorMovimiento = { codigo: CodigoErrorMovimiento; campo: string };
 
@@ -31,12 +33,18 @@ const error = (codigo: CodigoErrorMovimiento, campo: string): ErrorMovimiento =>
  * - La categoría es opcional («sin clasificar»).
  * - División: sin categoría propia, dos o más partes con monto > 0, categorías
  *   distintas, que sumen el monto.
+ * - `montoDestino` (SPEC 10): solo en una transferencia, y > 0. Si las monedas
+ *   exigen o rechazan el segundo monto lo decide la base, que conoce las cuentas.
  *
  * Una cadena vacía cuenta como cuenta no informada. Que las cuentas y
  * categorías existan, sean del usuario y del tipo lo garantiza la base.
  */
 export function validarMovimiento(m: MovimientoEntrada): ErrorMovimiento | null {
   if (m.monto <= 0n) return error("MONTO_REQUERIDO", "monto");
+  if (m.montoDestino !== null) {
+    if (m.tipo !== "transferencia") return error("MONTO_DESTINO_NO_PERMITIDO", "montoDestino");
+    if (m.montoDestino <= 0n) return error("MONTO_INVALIDO", "montoDestino");
+  }
 
   const origen = informado(m.cuentaOrigenId);
   const destino = informado(m.cuentaDestinoId);

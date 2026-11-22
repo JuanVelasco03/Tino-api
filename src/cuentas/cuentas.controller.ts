@@ -31,8 +31,8 @@ export class CuentasController {
 
   @Get()
   async listar(@Usuario() usuario: UsuarioAutenticado): Promise<ListaCuentasDto> {
-    const { resumen, fechaSaldos } = await this.cuentas.listar(usuario);
-    return aListaCuentasDto(resumen, fechaSaldos);
+    const { resumen, fechaSaldos, trm } = await this.cuentas.listar(usuario);
+    return aListaCuentasDto(resumen, fechaSaldos, trm);
   }
 
   @Get("archivadas")

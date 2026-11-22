@@ -236,8 +236,20 @@ describe("movimientos y préstamos", () => {
   describe("validarCapitalTrasCambio", () => {
     const camila = { id: "camila", tipo: "prestamo_otorgado" as const };
     const movimientos = [
-      { id: "d", monto: 600000n, cuentaOrigenId: "nequi", cuentaDestinoId: "camila" },
-      { id: "a", monto: 100000n, cuentaOrigenId: "camila", cuentaDestinoId: "nequi" },
+      {
+        id: "d",
+        monto: 600000n,
+        montoDestino: null,
+        cuentaOrigenId: "nequi",
+        cuentaDestinoId: "camila",
+      },
+      {
+        id: "a",
+        monto: 100000n,
+        montoDestino: null,
+        cuentaOrigenId: "camila",
+        cuentaDestinoId: "nequi",
+      },
     ];
 
     it("CAPITAL_NEGATIVO al borrar el desembolso con abonos vivos", () => {
@@ -271,8 +283,20 @@ describe("movimientos y préstamos", () => {
     it("en una contraída también", () => {
       const mama = { id: "mama", tipo: "deuda_contraida" as const };
       const movs = [
-        { id: "d", monto: 900000n, cuentaOrigenId: "mama", cuentaDestinoId: "banco" },
-        { id: "a", monto: 200000n, cuentaOrigenId: "banco", cuentaDestinoId: "mama" },
+        {
+          id: "d",
+          monto: 900000n,
+          montoDestino: null,
+          cuentaOrigenId: "mama",
+          cuentaDestinoId: "banco",
+        },
+        {
+          id: "a",
+          monto: 200000n,
+          montoDestino: null,
+          cuentaOrigenId: "banco",
+          cuentaDestinoId: "mama",
+        },
       ];
       expect(validarCapitalTrasCambio([mama], movs, "d", null)).toEqual({
         codigo: "CAPITAL_NEGATIVO",

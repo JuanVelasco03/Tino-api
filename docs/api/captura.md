@@ -1,6 +1,6 @@
 # Captura rápida y sugerencias
 
-> **Spec de origen:** SPEC 04 · **Necesidades:** `specs/necesidades/captura-rapida.md`
+> **Spec de origen:** SPEC 04 (predeterminada sin inversiones: SPEC 10) · **Necesidades:** `specs/necesidades/captura-rapida.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Lo que necesita el formulario de registro: una llamada al abrir
@@ -81,7 +81,8 @@ type SugerenciasDto = {
 - **Cuenta predeterminada:** la que eligió el usuario con `PATCH /perfil`
   ([`perfil.md`](perfil.md)) si sigue activa; si no eligió o está archivada, la
   primera no archivada en el orden de `GET /cuentas` (activos antes que
-  pasivos).
+  pasivos). Una cuenta de inversión nunca es la predeterminada (SPEC 10): no
+  admite gastos ni ingresos.
 - **Conceptos frecuentes:** sin distinguir mayúsculas; se muestra la grafía
   usada más recientemente. Un usuario sin movimientos recibe listas vacías.
 

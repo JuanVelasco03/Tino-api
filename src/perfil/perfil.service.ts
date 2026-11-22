@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import type { UsuarioAutenticado } from "../autenticacion/usuario.js";
 import { ErrorApi } from "../comun/error-api.js";
+import { TIPO_INVERSION } from "../domain/inversion/inversion.js";
 import type { Perfil } from "../domain/perfil/perfil.js";
 import { CuentasRepository } from "../repositories/supabase/cuentas.repository.js";
 import {
@@ -21,12 +22,16 @@ export class PerfilService {
     return this.perfiles.leerPropio(usuario.token);
   }
 
-  /** La cuenta predeterminada debe ser propia y no archivada; `null` la quita. */
+  /**
+   * La cuenta predeterminada debe ser propia, no archivada y no de inversión
+   * (SPEC 10: una inversión no admite gastos ni ingresos); `null` la quita.
+   */
   async actualizar(usuario: UsuarioAutenticado, cambios: CambiosPerfil): Promise<Perfil | null> {
     if (cambios.cuentaPredeterminadaId !== null) {
       const cuenta = await this.cuentas.obtener(usuario, cambios.cuentaPredeterminadaId);
       if (!cuenta) throw new ErrorApi("CUENTA_INVALIDA", CAMPO_CUENTA);
       if (cuenta.archivadaEn !== null) throw new ErrorApi("CUENTA_ARCHIVADA", CAMPO_CUENTA);
+      if (cuenta.tipo === TIPO_INVERSION) throw new ErrorApi("CUENTA_DE_INVERSION", CAMPO_CUENTA);
     }
     return this.perfiles.actualizar(usuario.token, usuario.id, cambios);
   }

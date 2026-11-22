@@ -7,7 +7,9 @@ function cuenta(
 ): Cuenta {
   return {
     nombre: parcial.id,
+    moneda: "COP",
     detalle: null,
+    inversion: null,
     saldoInicial: parcial.saldo,
     cupo: parcial.tipo === "tarjeta_credito" ? 4_000_000n : null,
     archivadaEn: null,

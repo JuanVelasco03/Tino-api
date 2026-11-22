@@ -5,6 +5,7 @@ import { validarMovimiento } from "./validar.js";
 const base: MovimientoEntrada = {
   tipo: "gasto",
   monto: 30_000n,
+  montoDestino: null,
   fecha: null,
   descripcion: null,
   nota: null,

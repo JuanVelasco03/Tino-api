@@ -8,16 +8,15 @@
  */
 import { randomUUID } from "node:crypto";
 import type { INestApplication } from "@nestjs/common";
-import { Test } from "@nestjs/testing";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import request, { type Response } from "supertest";
 import type { App } from "supertest/types.js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { AppModule } from "../src/app.module.js";
-import { CATALOGO, crearPipeValidacion, type CodigoError } from "../src/comun/error-api.js";
+import { CATALOGO, type CodigoError } from "../src/comun/error-api.js";
 import type { CuentaDto, ListaCuentasDto } from "../src/cuentas/dto.js";
 import { fechaLocal } from "../src/domain/fecha/fecha-local.js";
 import { cifrador, contexto } from "./montos.js";
+import { crearApp } from "./utilidades.js";
 
 const url = process.env.SUPABASE_URL;
 const clavePublicable = process.env.SUPABASE_PUBLISHABLE_KEY;
@@ -49,10 +48,8 @@ describe("/cuentas", () => {
   let app: INestApplication<App>;
 
   beforeAll(async () => {
-    const modulo = await Test.createTestingModule({ imports: [AppModule] }).compile();
-    app = modulo.createNestApplication();
-    app.useGlobalPipes(crearPipeValidacion());
-    await app.init();
+    // Con la fuente de TRM sin red (SPEC 10): `trm` llega null.
+    app = await crearApp();
   });
 
   afterAll(async () => {
@@ -144,6 +141,8 @@ describe("/cuentas", () => {
           pasivos: { total: "0", cuentas: [] },
           prestamos: { teDeben: "0", debes: "0" },
           patrimonioNeto: "0",
+          trm: null,
+          trmDesactualizada: false,
         });
       });
 
@@ -160,11 +159,13 @@ describe("/cuentas", () => {
           id: expect.any(String),
           nombre: "Nequi",
           tipo: "banco",
+          moneda: "COP",
           naturaleza: "activo",
           detalle: null,
           saldo: "20321",
           saldoInicial: "20321",
           tarjeta: null,
+          inversion: null,
           archivadaEn: null,
         });
 
