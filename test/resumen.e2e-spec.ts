@@ -261,6 +261,7 @@ describe("/resumen", () => {
         fechaCierre: ultimoDia(M),
         patrimonioAnterior: "2580000",
         resultado: "-300000",
+        revaluacion: "0",
         otrosCambios: "0",
         patrimonioCierre: "2280000",
       });
@@ -305,6 +306,7 @@ describe("/resumen", () => {
         fechaCierre: ultimoDia(M1),
         patrimonioAnterior: "0",
         resultado: "1580000",
+        revaluacion: "0",
         otrosCambios: "1000000",
         patrimonioCierre: "2580000",
       });

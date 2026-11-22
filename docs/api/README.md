@@ -13,14 +13,15 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 | Módulo | Documento | Spec de origen |
 |---|---|---|
 | Perfil | [`perfil.md`](perfil.md) | SPEC 02, SPEC 04 |
-| Cuentas | [`cuentas.md`](cuentas.md) | SPEC 03, SPEC 04, SPEC 07, SPEC 08 |
-| Movimientos | [`movimientos.md`](movimientos.md) | SPEC 04, SPEC 07, SPEC 08 |
-| Captura rápida y sugerencias | [`captura.md`](captura.md) | SPEC 04 |
+| Cuentas | [`cuentas.md`](cuentas.md) | SPEC 03, SPEC 04, SPEC 07, SPEC 08, SPEC 10 |
+| Movimientos | [`movimientos.md`](movimientos.md) | SPEC 04, SPEC 07, SPEC 08, SPEC 10 |
+| Captura rápida y sugerencias | [`captura.md`](captura.md) | SPEC 04, SPEC 10 |
 | Reglas de categorización | [`reglas.md`](reglas.md) | SPEC 04 |
-| Resumen del mes | [`resumen.md`](resumen.md) | SPEC 06, SPEC 08 |
-| Recurrentes | [`recurrentes.md`](recurrentes.md) | SPEC 07 |
-| Deudas y préstamos | [`prestamos.md`](prestamos.md) | SPEC 08 |
+| Resumen del mes | [`resumen.md`](resumen.md) | SPEC 06, SPEC 08, SPEC 10 |
+| Recurrentes | [`recurrentes.md`](recurrentes.md) | SPEC 07, SPEC 10 |
+| Deudas y préstamos | [`prestamos.md`](prestamos.md) | SPEC 08, SPEC 10 |
 | TRM | [`trm.md`](trm.md) | SPEC 09 |
+| Inversiones | [`inversiones.md`](inversiones.md) | SPEC 10 |
 
 ---
 
@@ -48,9 +49,13 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 - **Fechas e instantes:** ISO 8601 en UTC (`"2026-11-18T23:46:12.750Z"`). Una
   fecha calendario sin hora va como `"YYYY-MM-DD"` y ya viene en la zona del
   usuario.
-- **Porcentajes:** `number` entero (0–100). **Excepción:** en
+- **Porcentajes:** `number` entero (0–100). **Excepciones:** en
   [`resumen.md`](resumen.md) son enteros en décimas (`274` = 27,4 %), pueden ser
-  negativos o pasar de `1000`.
+  negativos o pasar de `1000`; en [`inversiones.md`](inversiones.md), enteros en
+  centésimas (`1248` = 12,48 %).
+- **Moneda:** los montos van en unidades menores de su moneda: pesos en COP,
+  centavos en USD. Solo una cuenta de inversión puede estar en USD (ver
+  [`inversiones.md`](inversiones.md)).
 - La presentación es del cliente (REGLAS §6): formato colombiano (punto de
   miles, coma decimal), pesos sin decimales, cifras tabulares, signo «−» de los
   pasivos.

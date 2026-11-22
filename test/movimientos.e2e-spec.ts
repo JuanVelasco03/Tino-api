@@ -171,6 +171,7 @@ describe("/movimientos", () => {
           tipo: "gasto",
           monto: "2",
           moneda: "COP",
+          montoDestino: null,
           tasa: "1",
           fecha: expect.any(String),
           descripcion: "Tinto",

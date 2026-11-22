@@ -19,6 +19,11 @@
  *
  * SPEC 09: la caché `trm`: solo SELECT e INSERT propios; UPDATE y DELETE
  * no tienen política y afectan 0 filas.
+ *
+ * SPEC 10: cuentas de inversión, `inversion_activos`, `inversion_operaciones`,
+ * su historial e `inversion_precios`; `crear_inversion` y
+ * `registrar_operacion` (security definer) atacadas con datos ajenos; permisos
+ * de columna de las operaciones y moneda fija.
  */
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -1007,6 +1012,212 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
           { usuario_id: b.id, valor_cent: filaB.valor_cent },
         ]),
       );
+    });
+  });
+
+  describe("inversiones (SPEC 10)", () => {
+    type Datos = { cuenta: string; activo: string; operacion: string };
+    let datosA: Datos;
+    let datosB: Datos;
+    const hoy = new Date().toISOString().slice(0, 10);
+
+    const cifrarOperacion = (u: Usuario, id: string, columna: "cantidad" | "monto", v: bigint) =>
+      cifrador().cifrar(v, contexto.operacion(u.id, id, columna));
+
+    async function preparar(u: Usuario, nombre: string): Promise<Datos> {
+      const cuenta = randomUUID();
+      const activo = randomUUID();
+      const operacion = randomUUID();
+      const { error } = await u.cliente.rpc("crear_inversion", {
+        p_cuenta_id: cuenta,
+        p_nombre: nombre,
+        p_moneda: "USD",
+        p_saldo_inicial: cifrador().cifrar(0n, contexto.cuenta(u.id, cuenta, "saldo_inicial")),
+        p_posiciones: [
+          {
+            operacion_id: operacion,
+            activo_id: activo,
+            simbolo: "VOO",
+            nombre: "Vanguard S&P 500 ETF",
+            cantidad: cifrarOperacion(u, operacion, "cantidad", 200000000n),
+            monto: cifrarOperacion(u, operacion, "monto", 100000n),
+            fecha: hoy,
+            precio_cent: 50000,
+          },
+        ],
+      });
+      if (error) throw new Error(`No se pudo crear la inversión: ${error.message}`);
+
+      // Una edición para que haya fila en inversion_operaciones_cambios.
+      const { error: errorEdicion } = await u.cliente
+        .from("inversion_operaciones")
+        .update({ monto: cifrarOperacion(u, operacion, "monto", 90000n) })
+        .eq("id", operacion);
+      if (errorEdicion) throw new Error(`No se pudo editar: ${errorEdicion.message}`);
+
+      // Un precio manual además del primero.
+      const { error: errorPrecio } = await u.cliente
+        .from("inversion_precios")
+        .insert({ activo_id: activo, precio_cent: 56240, fecha: hoy });
+      if (errorPrecio) throw new Error(`No se pudo insertar el precio: ${errorPrecio.message}`);
+
+      return { cuenta, activo, operacion };
+    }
+
+    beforeAll(async () => {
+      datosA = await preparar(a, "Inv A");
+      datosB = await preparar(b, "Inv B");
+    });
+
+    it("nadie ve cuentas de inversión, activos, operaciones, historial ni precios ajenos", async () => {
+      for (const [u, otro, propio] of [
+        [a, b, datosA],
+        [b, a, datosB],
+      ] as const) {
+        const { data: cuentas, error: errorCuentas } = await u.cliente
+          .from("cuentas")
+          .select("id, usuario_id")
+          .eq("tipo", "inversion");
+        expect(errorCuentas).toBeNull();
+        expect(cuentas).toEqual([{ id: propio.cuenta, usuario_id: u.id }]);
+
+        for (const tabla of [
+          "inversion_activos",
+          "inversion_operaciones",
+          "inversion_operaciones_cambios",
+          "inversion_precios",
+        ]) {
+          const { data, error } = await u.cliente.from(tabla).select("usuario_id");
+          expect(error).toBeNull();
+          expect(data!.length).toBeGreaterThan(0);
+          expect(data!.some((f) => f.usuario_id === otro.id)).toBe(false);
+        }
+      }
+    });
+
+    it("registrar_operacion sobre la cuenta ajena lanza INVERSION_NO_ENCONTRADA", async () => {
+      const operacion = randomUUID();
+      const { error } = await a.cliente.rpc("registrar_operacion", {
+        p_operacion_id: operacion,
+        p_cuenta_id: datosB.cuenta,
+        p_activo_id: randomUUID(),
+        p_simbolo: "BTC",
+        p_nombre: "Bitcoin",
+        p_clase: "inicial",
+        p_cantidad: cifrarOperacion(a, operacion, "cantidad", 1n),
+        p_monto: cifrarOperacion(a, operacion, "monto", 1n),
+        p_fecha: hoy,
+        p_precio_cent: 1,
+      });
+      expect(error?.message).toBe("INVERSION_NO_ENCONTRADA");
+
+      const { data } = await admin.from("inversion_operaciones").select("id").eq("id", operacion);
+      expect(data).toEqual([]);
+    });
+
+    it("INSERT de un precio sobre el activo ajeno falla por la FK", async () => {
+      const { error } = await a.cliente
+        .from("inversion_precios")
+        .insert({ activo_id: datosB.activo, precio_cent: 1, fecha: hoy });
+      expect(error?.code).toBe("23503");
+
+      const { data } = await admin
+        .from("inversion_precios")
+        .select("precio_cent")
+        .eq("activo_id", datosB.activo)
+        .eq("precio_cent", 1);
+      expect(data).toEqual([]);
+    });
+
+    it("UPDATE y DELETE de una operación ajena afectan 0 filas", async () => {
+      const { data: actualizadas, error: errorUpdate } = await a.cliente
+        .from("inversion_operaciones")
+        .update({ fecha: "2020-01-01" })
+        .eq("id", datosB.operacion)
+        .select("id");
+      expect(errorUpdate).toBeNull();
+      expect(actualizadas).toEqual([]);
+
+      const { data: borradas, error: errorDelete } = await a.cliente
+        .from("inversion_operaciones")
+        .delete()
+        .eq("id", datosB.operacion)
+        .select("id");
+      expect(errorDelete).toBeNull();
+      expect(borradas).toEqual([]);
+
+      const { data: real } = await admin
+        .from("inversion_operaciones")
+        .select("fecha")
+        .eq("id", datosB.operacion)
+        .single();
+      expect(real?.fecha).toBe(hoy);
+    });
+
+    it("INSERT directo en cuentas con tipo inversion falla por RLS", async () => {
+      const id = randomUUID();
+      const { error } = await a.cliente.from("cuentas").insert({
+        id,
+        nombre: "Directa",
+        tipo: "inversion",
+        saldo_inicial: cifrador().cifrar(0n, contexto.cuenta(a.id, id, "saldo_inicial")),
+      });
+      expect(error?.code).toBe("42501");
+    });
+
+    it("UPDATE de clase o activo_id falla por permisos", async () => {
+      const { error: errorClase } = await a.cliente
+        .from("inversion_operaciones")
+        .update({ clase: "compra" })
+        .eq("id", datosA.operacion);
+      expect(errorClase?.code).toBe("42501");
+
+      const { error: errorActivo } = await a.cliente
+        .from("inversion_operaciones")
+        .update({ activo_id: randomUUID() })
+        .eq("id", datosA.operacion);
+      expect(errorActivo?.code).toBe("42501");
+
+      const { data: real } = await admin
+        .from("inversion_operaciones")
+        .select("clase, activo_id")
+        .eq("id", datosA.operacion)
+        .single();
+      expect(real).toEqual({ clase: "inicial", activo_id: datosA.activo });
+    });
+
+    it("UPDATE de moneda lanza MONEDA_FIJA", async () => {
+      const { error } = await a.cliente
+        .from("cuentas")
+        .update({ moneda: "COP" })
+        .eq("id", datosA.cuenta);
+      expect(error?.message).toBe("MONEDA_FIJA");
+    });
+
+    it("UPDATE y DELETE de precios, propios o ajenos, afectan 0 filas", async () => {
+      for (const activo of [datosA.activo, datosB.activo]) {
+        const { data: actualizadas, error: errorUpdate } = await a.cliente
+          .from("inversion_precios")
+          .update({ precio_cent: 1 })
+          .eq("activo_id", activo)
+          .select("id");
+        expect(errorUpdate).toBeNull();
+        expect(actualizadas).toEqual([]);
+
+        const { data: borradas, error: errorDelete } = await a.cliente
+          .from("inversion_precios")
+          .delete()
+          .eq("activo_id", activo)
+          .select("id");
+        expect(errorDelete).toBeNull();
+        expect(borradas).toEqual([]);
+      }
+
+      const { data: reales } = await admin
+        .from("inversion_precios")
+        .select("precio_cent")
+        .in("activo_id", [datosA.activo, datosB.activo]);
+      expect(reales).toHaveLength(4);
     });
   });
 });

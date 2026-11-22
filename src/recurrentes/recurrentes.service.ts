@@ -23,6 +23,7 @@ import {
 } from "../domain/recurrente/validar.js";
 import { esTipoPrestamo } from "../domain/prestamo/prestamo.js";
 import { validarSinCuentaDePrestamo } from "../domain/prestamo/validar.js";
+import { TIPO_INVERSION } from "../domain/inversion/inversion.js";
 import { CuentasRepository } from "../repositories/supabase/cuentas.repository.js";
 import { MovimientosRepository } from "../repositories/supabase/movimientos.repository.js";
 import { PerfilesRepository } from "../repositories/supabase/perfiles.repository.js";
@@ -207,7 +208,10 @@ export class RecurrentesService {
     if (codigo) throw new ErrorApi(codigo);
   }
 
-  /** Una plantilla no toca cuentas de préstamo: sus movimientos nacen en Deudas (SPEC 08). */
+  /**
+   * Una plantilla no toca cuentas de préstamo: sus movimientos nacen en Deudas
+   * (SPEC 08). Ni cuentas de inversión: se manejan desde Inversiones (SPEC 10).
+   */
   private async rechazarPrestamos(
     usuario: UsuarioAutenticado,
     entrada: RecurrenteEntrada,
@@ -221,6 +225,14 @@ export class RecurrentesService {
       return tipo !== undefined && esTipoPrestamo(tipo);
     });
     if (error) throw new ErrorApi(error.codigo, error.campo);
+    for (const [campo, cuentaId] of [
+      ["cuentaOrigenId", entrada.cuentaOrigenId],
+      ["cuentaDestinoId", entrada.cuentaDestinoId],
+    ] as const) {
+      if (cuentaId !== null && tipos.get(cuentaId) === TIPO_INVERSION) {
+        throw new ErrorApi("CUENTA_DE_INVERSION", campo);
+      }
+    }
   }
 
   /**

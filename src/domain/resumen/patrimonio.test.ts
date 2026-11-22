@@ -17,12 +17,14 @@ import type {
 const nequi: CuentaPatrimonio = {
   id: "nequi",
   tipo: "banco",
+  moneda: "COP",
   saldoInicial: 1_000_000n,
   creadaEl: "2026-10-01",
 };
 const tarjeta: CuentaPatrimonio = {
   id: "tarjeta",
   tipo: "tarjeta_credito",
+  moneda: "COP",
   saldoInicial: 0n,
   creadaEl: "2026-10-01",
 };
@@ -33,6 +35,7 @@ function mov(
 ): MovimientoResumen {
   return {
     id: `m${++siguiente}`,
+    montoDestino: null,
     cuentaOrigenId: null,
     cuentaDestinoId: null,
     categoriaId: null,
@@ -123,6 +126,7 @@ describe("patrimonioEn", () => {
     const efectivo: CuentaPatrimonio = {
       id: "efectivo",
       tipo: "efectivo",
+      moneda: "COP",
       saldoInicial: 45_000n,
       creadaEl: "2026-11-15",
     };
@@ -149,6 +153,7 @@ describe("patrimonioEn", () => {
     const vieja: CuentaPatrimonio = {
       id: "vieja",
       tipo: "efectivo",
+      moneda: "COP",
       saldoInicial: 70_000n,
       creadaEl: "2026-08-01",
     };
@@ -243,6 +248,7 @@ describe("cambioDelMes", () => {
       fechaCierre: "2026-11-30",
       patrimonioAnterior: 2_580_000n,
       resultado: -300_000n,
+      revaluacion: 0n,
       otrosCambios: 0n,
       patrimonioCierre: 2_280_000n,
     });

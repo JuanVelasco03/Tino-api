@@ -1,6 +1,6 @@
 # Movimientos
 
-> **Spec de origen:** SPEC 04 (confirmados de recurrentes: SPEC 07; movimientos de préstamo: SPEC 08) · **Necesidades:** `specs/necesidades/captura-rapida.md`
+> **Spec de origen:** SPEC 04 (confirmados de recurrentes: SPEC 07; movimientos de préstamo: SPEC 08; fondeo de inversiones, `montoDestino` y tasa implícita: SPEC 10) · **Necesidades:** `specs/necesidades/captura-rapida.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Gastos, ingresos y transferencias: registrar, listar por mes, editar y
@@ -8,8 +8,29 @@ eliminar. Cada movimiento afecta el saldo de sus cuentas (`GET /cuentas` lo
 refleja en la siguiente lectura). Toda edición y eliminación queda registrada
 en la base (RN-13), sin endpoint de lectura por ahora.
 
-**Hoy:** todo en COP (`moneda: "COP"`, `tasa: "1"`). **Todavía no:** USD y
-TRM, persona asociada en la captura ni ajustes de saldo.
+**Hoy:** gastos e ingresos solo en COP. Una transferencia puede ir entre una
+cuenta COP y una inversión USD (SPEC 10), con dos montos. **Todavía no:**
+gastos o ingresos en USD, persona asociada en la captura ni ajustes de saldo.
+
+### Fondeo y retiro de inversiones (SPEC 10)
+
+Llevar dinero a una cuenta de inversión, o sacarlo, es una **transferencia**.
+Comprar y vender dentro de la inversión no son movimientos: van por
+[`inversiones.md`](inversiones.md).
+
+- Si las dos cuentas usan la misma moneda, se envía solo `monto`. Un
+  `montoDestino` responde `MONTO_DESTINO_NO_PERMITIDO`.
+- Si difieren (COP ↔ USD), se envían los dos: `monto` es lo que salió, en la
+  moneda del origen, y `montoDestino` lo que llegó, en la del destino. Sin
+  `montoDestino`: `MONTO_DESTINO_REQUERIDO`.
+- La API congela la tasa implícita en `tasa` (COP por US$ 1, RN-04):
+  8.240.000 pesos → US$ 2.000,00 da `"4120"`.
+- El equivalente en COP de un movimiento entre monedas es su lado COP: `monto`
+  si el origen es COP, `montoDestino` si lo es el destino.
+- Una inversión solo admite transferencias: un gasto o un ingreso con ella
+  responde `CUENTA_DE_INVERSION`.
+- Crear, editar o borrar una transferencia que deja el efectivo de una
+  inversión negativo en algún día responde `EFECTIVO_INSUFICIENTE`.
 
 ### Movimientos de préstamo (SPEC 08)
 
@@ -53,9 +74,10 @@ type Ref = { id: string; nombre: string };
 type MovimientoDto = {
   id: string;
   tipo: TipoMovimiento;
-  monto: string;                // SIEMPRE positivo; el signo lo pone el cliente según tipo
-  moneda: "COP";
-  tasa: string;                 // decimal como texto; hoy "1"
+  monto: string;                // SIEMPRE positivo, en la moneda de `moneda`; el signo lo pone el cliente según tipo
+  moneda: "COP" | "USD";        // la de la cuenta de origen, o la del destino en un ingreso
+  montoDestino: string | null;  // solo en una transferencia entre monedas: lo que llegó, en la moneda del destino
+  tasa: string;                 // decimal como texto: la implícita (COP por US$ 1) entre monedas, o "1"
   fecha: string;                // "YYYY-MM-DD", día contable del usuario
   descripcion: string | null;
   nota: string | null;
@@ -110,6 +132,7 @@ registrado primero (el recién creado queda arriba). Sin paginación.
       "tipo": "gasto",
       "monto": "30000",
       "moneda": "COP",
+      "montoDestino": null,
       "tasa": "1",
       "fecha": "2026-11-19",
       "descripcion": "Almuerzo y mercado",
@@ -141,7 +164,8 @@ Un mes sin movimientos: `"movimientos": []`.
 ```ts
 type MovimientoCuerpo = {
   tipo: TipoMovimiento;
-  monto: string;                // ^\d{1,19}$, > 0
+  monto: string;                // ^\d{1,19}$, > 0, en la moneda del origen (o del destino en un ingreso)
+  montoDestino?: string | null; // solo en una transferencia entre monedas: ^\d{1,19}$, > 0
   fecha?: string;               // "YYYY-MM-DD". POST: opcional (hoy en la zona del usuario). PUT: obligatoria
   descripcion?: string | null;  // ≤ 80; "" = sin descripción; se recortan espacios
   nota?: string | null;         // ≤ 500; "" = sin nota
@@ -190,6 +214,11 @@ Errores (llega el primero):
 | 422 | `CUENTA_INVALIDA` | `cuentaOrigenId` o `cuentaDestinoId` | No existe o es de otro usuario. |
 | 409 | `CUENTA_ARCHIVADA` | `cuentaOrigenId` o `cuentaDestinoId` | La cuenta está archivada. |
 | 422 | `CUENTA_DE_PRESTAMO` | `cuentaOrigenId` o `cuentaDestinoId` | La cuenta es un préstamo: se registra desde Deudas ([`prestamos.md`](prestamos.md)). |
+| 400 | `MONTO_DESTINO_REQUERIDO` | `montoDestino` | Transferencia entre monedas distintas sin `montoDestino`. |
+| 400 | `MONTO_DESTINO_NO_PERMITIDO` | `montoDestino` | `montoDestino` con la misma moneda, o en un gasto o ingreso. |
+| 400 | `MONTO_INVALIDO` | `montoDestino` | `montoDestino` no es un entero > 0. |
+| 422 | `CUENTA_DE_INVERSION` | `cuentaOrigenId` o `cuentaDestinoId` | Gasto o ingreso con una cuenta de inversión. |
+| 422 | `EFECTIVO_INSUFICIENTE` | — | La transferencia deja el efectivo de una inversión negativo algún día. |
 
 ---
 
@@ -213,6 +242,7 @@ Errores: los del `POST`, más:
 | 422 | `MOVIMIENTO_DE_PRESTAMO` | `tipo` | Movimiento de préstamo que cambia de tipo o de préstamo, o interés que cambia de tipo. |
 | 422 | `CUENTA_DE_PRESTAMO` | `cuentaOrigenId` o `cuentaDestinoId` | La cuenta nueva es un préstamo. |
 | 422 | `CAPITAL_NEGATIVO` | — | El cambio deja un préstamo con capital negativo. |
+| 422 | `EFECTIVO_INSUFICIENTE` | — | El cambio deja el efectivo de una inversión, la de antes o la nueva, negativo algún día. |
 
 ---
 
@@ -235,6 +265,7 @@ variable, su estimado.
 | 404 | `MOVIMIENTO_NO_ENCONTRADO` | No existe o es de otro usuario. |
 | 409 | `CUENTA_ARCHIVADA` | Alguna cuenta del movimiento está archivada. |
 | 422 | `CAPITAL_NEGATIVO` | Borrarlo deja un préstamo con capital negativo. |
+| 422 | `EFECTIVO_INSUFICIENTE` | Borrarlo deja el efectivo de una inversión negativo algún día (p. ej. el fondeo que pagó una compra). |
 
 ---
 
@@ -267,6 +298,10 @@ variable, su estimado.
 | `CUENTA_DE_PRESTAMO` | 422 | la cuenta | Esa cuenta es un préstamo. Regístralo desde Deudas. |
 | `MOVIMIENTO_DE_PRESTAMO` | 422 | `tipo` | Este movimiento es de un préstamo: no cambia de tipo ni de préstamo. |
 | `CAPITAL_NEGATIVO` | 422 | — | El cambio deja el préstamo con capital negativo. |
+| `MONTO_DESTINO_REQUERIDO` | 400 | `montoDestino` | Escribe cuánto llegó a la cuenta de destino. |
+| `MONTO_DESTINO_NO_PERMITIDO` | 400 | `montoDestino` | Las dos cuentas usan la misma moneda: basta un monto. |
+| `CUENTA_DE_INVERSION` | 422 | la cuenta | Esa cuenta es de inversión: solo admite transferencias y se maneja desde Inversiones. |
+| `EFECTIVO_INSUFICIENTE` | 422 | — | No hay efectivo suficiente en la cuenta. Registra primero el fondeo. |
 
 Más los comunes: `NO_AUTENTICADO`, `ENTRADA_INVALIDA`, `ERROR_INTERNO`.
 

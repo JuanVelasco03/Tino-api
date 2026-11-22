@@ -73,6 +73,7 @@ export function validarRecurrente(
   return validarMovimiento({
     tipo: e.tipo,
     monto: e.monto,
+    montoDestino: null,
     fecha: null,
     descripcion: concepto,
     nota: null,

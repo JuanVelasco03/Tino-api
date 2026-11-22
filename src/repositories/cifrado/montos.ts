@@ -14,10 +14,11 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "node:crypto";
 
 export type ColumnaMonto =
-  | { tabla: "movimientos"; columna: "monto" }
+  | { tabla: "movimientos"; columna: "monto" | "monto_destino" }
   | { tabla: "movimiento_partes"; columna: "monto" }
   | { tabla: "cuentas"; columna: "saldo_inicial" | "cupo" }
-  | { tabla: "recurrentes"; columna: "monto" };
+  | { tabla: "recurrentes"; columna: "monto" }
+  | { tabla: "inversion_operaciones"; columna: "cantidad" | "monto" };
 
 /** Dónde vive el valor. `idFila` de una parte: `<movimiento_id>:<categoria_id>`. */
 export type ContextoMonto = ColumnaMonto & { usuarioId: string; idFila: string };
@@ -28,6 +29,13 @@ export const contexto = {
     usuarioId,
     tabla: "movimientos",
     columna: "monto",
+    idFila: id,
+  }),
+  /** Monto que llegó al destino en una transferencia entre monedas (SPEC 10). */
+  montoDestino: (usuarioId: string, id: string): ContextoMonto => ({
+    usuarioId,
+    tabla: "movimientos",
+    columna: "monto_destino",
     idFila: id,
   }),
   parte: (usuarioId: string, movimientoId: string, categoriaId: string): ContextoMonto => ({
@@ -46,6 +54,13 @@ export const contexto = {
     usuarioId,
     tabla: "recurrentes",
     columna: "monto",
+    idFila: id,
+  }),
+  /** Cantidad (10⁻⁸ unidades) o monto de una operación de inversión (SPEC 10). */
+  operacion: (usuarioId: string, id: string, columna: "cantidad" | "monto"): ContextoMonto => ({
+    usuarioId,
+    tabla: "inversion_operaciones",
+    columna,
     idFila: id,
   }),
 };

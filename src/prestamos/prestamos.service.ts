@@ -3,6 +3,7 @@ import type { UsuarioAutenticado } from "../autenticacion/usuario.js";
 import { ErrorApi } from "../comun/error-api.js";
 import { fechaLocal } from "../domain/fecha/fecha-local.js";
 import type { Movimiento } from "../domain/movimiento/movimiento.js";
+import { TIPO_INVERSION } from "../domain/inversion/inversion.js";
 import { ZONA_HORARIA_POR_DEFECTO } from "../domain/perfil/perfil.js";
 import { consolidar, ordenarPrestamos, resumirPrestamo } from "../domain/prestamo/consolidado.js";
 import {
@@ -127,6 +128,7 @@ export class PrestamosService {
     };
     lanzar(validarAlta(entrada));
     if (!esTipoPrestamo(entrada.tipo)) throw new ErrorApi("TIPO_INVALIDO", "tipo");
+    await this.rechazarCuentaDeInversion(usuario, cuerpo.cuentaId);
     const nombre = entrada.nombre.trim();
     const id = await this.prestamos.crear(usuario, {
       tipo: entrada.tipo,
@@ -151,6 +153,7 @@ export class PrestamosService {
     const fecha = cuerpo.fecha ?? hoy;
     lanzar(validarDesembolso({ monto: cuerpo.monto, fecha }));
     await this.rechazarCuentaDePrestamo(usuario, cuerpo.cuentaId);
+    await this.rechazarCuentaDeInversion(usuario, cuerpo.cuentaId);
     await this.prestamos.desembolsar(usuario, prestamo, {
       monto: cuerpo.monto,
       fecha,
@@ -215,6 +218,7 @@ export class PrestamosService {
         },
       ),
     );
+    await this.rechazarCuentaDeInversion(usuario, cuerpo.cuentaId);
     const categoriaInteresId =
       cuerpo.interes === 0n
         ? null
@@ -294,6 +298,14 @@ export class PrestamosService {
     const tipo = tipos.get(cuentaId);
     if (tipo !== undefined && esTipoPrestamo(tipo)) {
       throw new ErrorApi("CUENTA_DE_PRESTAMO", "cuentaId");
+    }
+  }
+
+  /** La cuenta propia de un préstamo no puede ser una inversión (SPEC 10). */
+  private async rechazarCuentaDeInversion(usuario: UsuarioAutenticado, cuentaId: string) {
+    const tipos = await this.movimientos.tiposDeCuenta(usuario, [cuentaId]);
+    if (tipos.get(cuentaId) === TIPO_INVERSION) {
+      throw new ErrorApi("CUENTA_DE_INVERSION", "cuentaId");
     }
   }
 

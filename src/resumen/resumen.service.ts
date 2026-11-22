@@ -6,8 +6,10 @@ import { fechaLocal } from "../domain/fecha/fecha-local.js";
 import { mesAnterior, rangoDelMes } from "../domain/fecha/mes.js";
 import { ZONA_HORARIA_POR_DEFECTO } from "../domain/perfil/perfil.js";
 import { resumirMes } from "../domain/resumen/mes.js";
+import { TIPO_INVERSION } from "../domain/inversion/inversion.js";
 import {
   cambioDelMes,
+  fechasConTrm,
   inicio,
   patrimonioEn,
   seriePatrimonio,
@@ -15,8 +17,10 @@ import {
 } from "../domain/resumen/patrimonio.js";
 import type { DatosPatrimonio } from "../domain/resumen/resumen.js";
 import { CategoriasRepository } from "../repositories/supabase/categorias.repository.js";
+import { InversionesRepository } from "../repositories/supabase/inversiones.repository.js";
 import { PerfilesRepository } from "../repositories/supabase/perfiles.repository.js";
 import { ResumenRepository } from "../repositories/supabase/resumen.repository.js";
+import { TrmService } from "../trm/trm.service.js";
 import {
   aCambioDelMesDto,
   aCategoriasDto,
@@ -32,11 +36,16 @@ export class ResumenService {
     private readonly resumen: ResumenRepository,
     private readonly categorias: CategoriasRepository,
     private readonly perfiles: PerfilesRepository,
+    private readonly inversiones: InversionesRepository,
+    private readonly trm: TrmService,
   ) {}
 
   /**
    * Resumen del mes `mes` ("YYYY-MM"); sin mes, el actual en la zona del
    * perfil. Un mes posterior al actual → MES_FUTURO. Todo lo calcula el dominio.
+   * Las inversiones aportan su valor de mercado en COP; la TRM de todas las
+   * fechas que hacen falta sale de una sola llamada a `enFechas`, y solo si
+   * hay alguna inversión USD (SPEC 10).
    */
   async obtener(usuario: UsuarioAutenticado, mes: string | undefined): Promise<ResumenDto> {
     const perfil = await this.perfiles.leerPropio(usuario.token);
@@ -54,15 +63,25 @@ export class ResumenService {
       this.categorias.listar(usuario.token),
     ]);
 
-    const datos: DatosPatrimonio = {
+    const idsInversion = lectura.cuentas.filter((c) => c.tipo === TIPO_INVERSION).map((c) => c.id);
+    const base: DatosPatrimonio = {
       cuentas: lectura.cuentas.map((c) => ({
         id: c.id,
         tipo: c.tipo,
+        moneda: c.moneda,
         saldoInicial: c.saldoInicial,
         creadaEl: fechaLocal(c.creadoEn, zona),
       })),
       cambios: lectura.cambios.map((c) => ({ ...c, fecha: fechaLocal(c.cambiadoEn, zona) })),
       movimientos: lectura.movimientos,
+      inversiones: await this.inversiones.datos(usuario, idsInversion),
+    };
+    const fechasTrm = fechasConTrm(base, fechaHoy, mesMostrado);
+    const trm =
+      fechasTrm.length === 0 ? new Map() : await this.trm.enFechas(usuario.token, fechasTrm);
+    const datos: DatosPatrimonio = {
+      ...base,
+      trm: new Map([...trm].map(([fecha, r]) => [fecha, r.trm?.valorCent ?? null])),
     };
 
     const delMes = resumirMes(lectura.movimientos, lectura.partes, categorias, mesMostrado);

@@ -4,6 +4,7 @@ import { AutenticacionGuard } from "./autenticacion/autenticacion.guard.js";
 import { CapturaModule } from "./captura/captura.module.js";
 import { ErrorApiFilter } from "./comun/error-api.filter.js";
 import { CuentasModule } from "./cuentas/cuentas.module.js";
+import { InversionesModule } from "./inversiones/inversiones.module.js";
 import { MovimientosModule } from "./movimientos/movimientos.module.js";
 import { PerfilModule } from "./perfil/perfil.module.js";
 import { PrestamosModule } from "./prestamos/prestamos.module.js";
@@ -27,6 +28,7 @@ import { TrmModule } from "./trm/trm.module.js";
     RecurrentesModule,
     PrestamosModule,
     TrmModule,
+    InversionesModule,
   ],
   providers: [
     // Guard global: toda ruta exige un token válido del proveedor (RF-03).

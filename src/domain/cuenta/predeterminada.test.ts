@@ -29,4 +29,11 @@ describe("resolverCuentaPredeterminada", () => {
     expect(resolverCuentaPredeterminada("efectivo", [archivada])).toBeNull();
     expect(resolverCuentaPredeterminada(null, [])).toBeNull();
   });
+
+  it("una inversión nunca es la predeterminada (SPEC 10)", () => {
+    const etoro = { id: "etoro", tipo: "inversion" as const, archivadaEn: null };
+    expect(resolverCuentaPredeterminada(null, [etoro, nequi])).toBe("nequi");
+    expect(resolverCuentaPredeterminada("etoro", [etoro, tarjeta])).toBe("tarjeta");
+    expect(resolverCuentaPredeterminada(null, [etoro])).toBeNull();
+  });
 });

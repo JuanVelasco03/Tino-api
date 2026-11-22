@@ -10,6 +10,7 @@ const cuenta = (
   id,
   nombre: id,
   tipo,
+  moneda: "COP",
   detalle: null,
   saldoInicial,
   cupo: tipo === "tarjeta_credito" ? 4_000_000n : null,
@@ -19,16 +20,24 @@ const cuenta = (
 
 const gasto = (origen: string, monto: bigint): EfectoMovimiento => ({
   monto,
+  montoDestino: null,
   cuentaOrigenId: origen,
   cuentaDestinoId: null,
 });
 const ingreso = (destino: string, monto: bigint): EfectoMovimiento => ({
   monto,
+  montoDestino: null,
   cuentaOrigenId: null,
   cuentaDestinoId: destino,
 });
-const transferencia = (origen: string, destino: string, monto: bigint): EfectoMovimiento => ({
+const transferencia = (
+  origen: string,
+  destino: string,
+  monto: bigint,
+  montoDestino: bigint | null = null,
+): EfectoMovimiento => ({
   monto,
+  montoDestino,
   cuentaOrigenId: origen,
   cuentaDestinoId: destino,
 });
@@ -53,6 +62,19 @@ describe("calcularSaldo (RN-01, RN-02)", () => {
 
   it("ignora movimientos de otras cuentas", () => {
     expect(calcularSaldo(cuenta("n", "efectivo", 0n), [gasto("x", 9n), ingreso("y", 9n)])).toBe(0n);
+  });
+
+  it("entre monedas (SPEC 10): el origen resta monto y el destino suma montoDestino", () => {
+    const fondeo = transferencia("b", "i", 8_240_000n, 200_000n);
+    expect(calcularSaldo(cuenta("b", "banco", 10_000_000n), [fondeo])).toBe(1_760_000n);
+    expect(calcularSaldo({ id: "i", tipo: "inversion", saldoInicial: 0n }, [fondeo])).toBe(
+      200_000n,
+    );
+  });
+
+  it("sin montoDestino el destino suma monto, como siempre", () => {
+    const t = transferencia("b", "e", 5_000n);
+    expect(calcularSaldo(cuenta("e", "efectivo", 0n), [t])).toBe(5_000n);
   });
 
   it("el saldo de un activo puede quedar negativo", () => {

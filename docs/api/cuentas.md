@@ -1,15 +1,22 @@
 # Cuentas
 
-> **Spec de origen:** SPEC 03 (saldo con movimientos y `CUENTA_CON_MOVIMIENTOS`: SPEC 04; `CUENTA_CON_RECURRENTES`: SPEC 07; préstamos en el patrimonio: SPEC 08) · **Necesidades:** `specs/necesidades/cuentas.md`
+> **Spec de origen:** SPEC 03 (saldo con movimientos y `CUENTA_CON_MOVIMIENTOS`: SPEC 04; `CUENTA_CON_RECURRENTES`: SPEC 07; préstamos en el patrimonio: SPEC 08; inversiones, `moneda` y TRM: SPEC 10) · **Necesidades:** `specs/necesidades/cuentas.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Cuentas del usuario agrupadas en activos y pasivos, con saldos, totales y
 patrimonio neto calculados por la API. Alta, edición, orden, archivo,
 restauración y borrado.
 
-**Hoy existen:** `efectivo`, `banco` y `tarjeta_credito` (sin ciclo), todas en
-COP. **Todavía no:** USD y TRM, inversiones, préstamos como líneas de esta
-pantalla ni ciclo de la tarjeta (corte, pago límite).
+**Hoy existen:** `efectivo`, `banco` y `tarjeta_credito` (sin ciclo), en COP,
+y las **inversiones** (SPEC 10), en COP o USD. **Todavía no:** préstamos como
+líneas de esta pantalla ni ciclo de la tarjeta (corte, pago límite).
+
+**Inversiones** (SPEC 10): una inversión es una cuenta de tipo `inversion` que
+va en `activos`, con su `saldo` a **valor de mercado en COP**. Nace en
+[`POST /inversiones`](inversiones.md), no en `POST /cuentas`; su detalle,
+operaciones y precios viven en [`inversiones.md`](inversiones.md). Aquí se
+renombra, se le cambia el detalle o el efectivo inicial, se ordena, se archiva
+y se restaura como cualquier otra.
 
 **Préstamos y deudas con personas** (SPEC 08) viven en
 [`prestamos.md`](prestamos.md). No salen en los grupos ni en ninguna ruta de
@@ -40,21 +47,29 @@ existe, es de otro usuario o es el de un préstamo, `404 CUENTA_NO_ENCONTRADA`.
 ## Tipos
 
 ```ts
-type TipoCuenta = "efectivo" | "banco" | "tarjeta_credito";
-type Naturaleza = "activo" | "pasivo"; // efectivo y banco → activo; tarjeta_credito → pasivo
+type TipoCuenta = "efectivo" | "banco" | "tarjeta_credito" | "inversion"; // inversion: solo la crea POST /inversiones
+type Naturaleza = "activo" | "pasivo"; // efectivo, banco e inversion → activo; tarjeta_credito → pasivo
+type Moneda = "COP" | "USD";
 
 type CuentaDto = {
   id: string;                 // UUID
   nombre: string;
   tipo: TipoCuenta;
+  moneda: Moneda;             // "COP" salvo en una inversión en dólares; fija
   naturaleza: Naturaleza;     // la calcula la API desde el tipo
   detalle: string | null;     // texto libre ≤ 60 (ej. "Ahorros ·· 4821")
-  saldo: string;              // saldo actual; en un pasivo, la DEUDA vigente, positiva
-  saldoInicial: string;       // en un pasivo, la deuda inicial
+  saldo: string;              // saldo actual; en un pasivo, la DEUDA vigente, positiva;
+                              // en una inversión, su valor de mercado en COP ("0" si es USD y no hay TRM)
+  saldoInicial: string;       // en un pasivo, la deuda inicial; en una inversión, el efectivo inicial en su moneda
   tarjeta: {                  // solo en tarjeta_credito; null en las demás
     cupo: string;             // cupo total
     disponible: string;       // cupo − deuda; puede ser negativo si la deuda excede el cupo
     porcentajeUsado: number;  // entero 0–100, truncado (32,1 % → 32), acotado a 100
+  } | null;
+  inversion: {                // solo en una inversión; null en las demás. En su moneda
+    efectivo: string;
+    valorMercado: string;     // efectivo + posiciones
+    tasa: string | null;      // TRM aplicada ("4120.00"); null en COP o sin TRM
   } | null;
   archivadaEn: string | null; // ISO 8601; null = no archivada
 };
@@ -73,8 +88,20 @@ type ListaCuentasDto = {
     debes: string;            // Σ deudas contraídas, positiva
   };
   patrimonioNeto: string;     // activos.total − pasivos.total + prestamos.teDeben − prestamos.debes; puede ser negativo
+  trm: TrmDto | null;         // TRM de hoy (ver trm.md), para la cabecera; null si nunca se obtuvo
+  trmDesactualizada: boolean; // true: la fuente falló y trm es la última conocida
 };
 ```
+
+### Inversiones en la lista
+
+- `saldo` es el valor de mercado en COP: con la TRM de hoy si la cuenta es USD.
+  Así `activos.total` y `patrimonioNeto` incluyen las inversiones a mercado.
+- El cliente muestra el valor en su moneda con `inversion.valorMercado`, el
+  equivalente con `saldo` y la tasa con `inversion.tasa` (REGLAS §6).
+- Una inversión USD sin TRM nunca obtenida vale `"0"` en `saldo` y trae
+  `inversion.tasa: null`: el cliente indica que falta la tasa.
+- `tarjeta` es `null`.
 
 ### Saldo de un pasivo: lo pone el cliente
 
@@ -119,11 +146,13 @@ patrimonio.
         "id": "0f9c6c1e-3a52-4c51-9a7e-2b1f0d6f5a11",
         "nombre": "Nequi",
         "tipo": "banco",
+        "moneda": "COP",
         "naturaleza": "activo",
         "detalle": null,
         "saldo": "20321",
         "saldoInicial": "20321",
         "tarjeta": null,
+        "inversion": null,
         "archivadaEn": null
       }
     ]
@@ -135,17 +164,21 @@ patrimonio.
         "id": "7d2b8e40-91c3-4f0e-8b6a-5c4d3e2f1a09",
         "nombre": "Tarjeta",
         "tipo": "tarjeta_credito",
+        "moneda": "COP",
         "naturaleza": "pasivo",
         "detalle": "Visa ·· 1234",
         "saldo": "1284300",
         "saldoInicial": "1284300",
         "tarjeta": { "cupo": "4000000", "disponible": "2715700", "porcentajeUsado": 32 },
+        "inversion": null,
         "archivadaEn": null
       }
     ]
   },
   "prestamos": { "teDeben": "0", "debes": "0" },
-  "patrimonioNeto": "-1263979"
+  "patrimonioNeto": "-1263979",
+  "trm": { "valor": "4120.00", "vigenteDesde": "2026-11-18", "vigenteHasta": "2026-11-18", "fuente": "Superintendencia Financiera de Colombia" },
+  "trmDesactualizada": false
 }
 ```
 
@@ -157,7 +190,9 @@ patrimonio.
   "activos": { "total": "0", "cuentas": [] },
   "pasivos": { "total": "0", "cuentas": [] },
   "prestamos": { "teDeben": "0", "debes": "0" },
-  "patrimonioNeto": "0"
+  "patrimonioNeto": "0",
+  "trm": null,
+  "trmDesactualizada": false
 }
 ```
 
@@ -207,7 +242,7 @@ type AltaCuenta = {
 | 400 | `NOMBRE_REQUERIDO` | `nombre` | Falta, o queda vacío tras recortar. |
 | 400 | `NOMBRE_LARGO` | `nombre` | Más de 60 caracteres. |
 | 409 | `NOMBRE_DUPLICADO` | `nombre` | Ya hay una cuenta **no archivada** con ese nombre, sin distinguir mayúsculas («nequi» = «Nequi»). |
-| 400 | `TIPO_INVALIDO` | `tipo` | Falta, o no es uno de los tres tipos. |
+| 400 | `TIPO_INVALIDO` | `tipo` | Falta, o no es uno de los tres tipos (`inversion` tampoco: nace en `POST /inversiones`). |
 | 400 | `DETALLE_LARGO` | `detalle` | Más de 60 caracteres. |
 | 400 | `MONTO_INVALIDO` | `saldoInicial` o `cupo` | No es un string de entero no negativo: `"12.5"`, `"-1"`, `"1.000"`, `5` (number), etc. |
 | 400 | `CUPO_REQUERIDO` | `cupo` | Tarjeta sin cupo o con cupo `"0"`. |
@@ -243,11 +278,16 @@ type EdicionCuenta = {
 - Una tarjeta no puede quedar sin cupo, y efectivo/banco no pueden pasar a
   tarjeta. En la interfaz conviene ofrecer como opciones de tipo solo las de la
   misma naturaleza.
+- En una inversión (SPEC 10), `saldoInicial` es el efectivo inicial en su
+  moneda. Bajarlo hasta dejar el efectivo negativo algún día responde
+  `EFECTIVO_INSUFICIENTE`. El tipo no cambia y no lleva cupo.
 
 | Estado | `codigo` | `campo` | Cuándo |
 |---|---|---|---|
 | 400 | `SIN_CAMBIOS` | — | Cuerpo vacío `{}`. |
 | 422 | `CAMBIO_DE_NATURALEZA` | `tipo` | Activo → pasivo o al revés (banco → tarjeta, tarjeta → efectivo…). |
+| 422 | `TIPO_DE_INVERSION_FIJO` | `tipo` | Cambiar el tipo de una inversión. |
+| 422 | `EFECTIVO_INSUFICIENTE` | — | El nuevo saldo inicial de una inversión deja su efectivo negativo algún día. |
 | 400 | `CUPO_NO_PERMITIDO` | `cupo` | `cupo` en una cuenta que no es tarjeta. |
 | 400 | `CUPO_REQUERIDO` | `cupo` | `cupo: "0"` en una tarjeta. |
 | 409 | `CUENTA_ARCHIVADA` | — | La cuenta está archivada: hay que restaurarla primero. |
@@ -312,7 +352,7 @@ Sin cuerpo. **200** `CuentaDto` con `archivadaEn`.
 
 | Estado | `codigo` | Cuándo |
 |---|---|---|
-| 409 | `SALDO_NO_CERO` | El saldo no es cero. |
+| 409 | `SALDO_NO_CERO` | El saldo no es cero. En una inversión: tiene efectivo o posiciones abiertas. |
 | 409 | `CUENTA_ARCHIVADA` | Ya estaba archivada. |
 | 404 | `CUENTA_NO_ENCONTRADA` | No existe o es de otro usuario. |
 
@@ -360,6 +400,8 @@ un nombre nuevo al usuario y reintentar con `{ "nombre": "Nequi vieja" }`.
 | `SALDO_NO_CERO` | 409 | — | Solo puedes archivar una cuenta con saldo cero. |
 | `CUENTA_CON_MOVIMIENTOS` | 409 | — | La cuenta tiene movimientos. Archívala en lugar de eliminarla. |
 | `CUENTA_CON_RECURRENTES` | 409 | — | La cuenta tiene recurrentes. Cámbialos o elimínalos primero. |
+| `TIPO_DE_INVERSION_FIJO` | 422 | `tipo` | Una cuenta de inversión no cambia de tipo. |
+| `EFECTIVO_INSUFICIENTE` | 422 | — | No hay efectivo suficiente en la cuenta. Registra primero el fondeo. |
 
 Más los comunes: `NO_AUTENTICADO`, `ENTRADA_INVALIDA`, `ERROR_INTERNO`.
 

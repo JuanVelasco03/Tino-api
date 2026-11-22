@@ -11,12 +11,17 @@
  * Préstamos (SPEC 08): `tiposDeCuenta`, `esInteresDePrestamo` y `efectosDe`
  * dan al servicio lo que necesita para `CUENTA_DE_PRESTAMO`,
  * `MOVIMIENTO_DE_PRESTAMO` y `CAPITAL_NEGATIVO`.
+ *
+ * Inversiones (SPEC 10): `monto_destino` se cifra con su propia AAD
+ * (`movimientos|monto_destino|<id>`) y la tasa implícita llega calculada por
+ * el dominio. La moneda la fija la función de Postgres desde las cuentas.
  */
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import type { UsuarioAutenticado } from "../../autenticacion/usuario.js";
 import { ErrorApi } from "../../comun/error-api.js";
+import { esMoneda, type Moneda } from "../../domain/inversion/inversion.js";
 import {
   TIPOS_MOVIMIENTO,
   type Movimiento,
@@ -24,6 +29,7 @@ import {
   type Ref,
   type TipoMovimiento,
 } from "../../domain/movimiento/movimiento.js";
+import { TASA_UNITARIA } from "../../domain/movimiento/tasa.js";
 import type { MovimientoConId } from "../../domain/prestamo/validar.js";
 import { CifradorMontos, contexto } from "../cifrado/montos.js";
 import { ClienteSupabase } from "./cliente.js";
@@ -31,7 +37,7 @@ import { desdeFuncion, errorInterno } from "./errores.js";
 import type { Database } from "./tipos.js";
 
 const COLUMNAS =
-  "id, tipo, monto, moneda, tasa::text, fecha, descripcion, nota, " +
+  "id, tipo, monto, monto_destino, moneda, tasa::text, fecha, descripcion, nota, " +
   "cuenta_origen_id, cuenta_origen_nombre, cuenta_destino_id, cuenta_destino_nombre, " +
   "categoria_id, categoria_nombre, partes, creado_en, actualizado_en";
 
@@ -41,6 +47,7 @@ type FilaDetalle = {
   id: string | null;
   tipo: string | null;
   monto: unknown;
+  monto_destino: unknown;
   moneda: string | null;
   tasa: unknown;
   fecha: string | null;
@@ -57,10 +64,17 @@ type FilaDetalle = {
   actualizado_en: string | null;
 };
 
-/** Textos cifrados guardados de un movimiento: el monto y, por categoría, el de cada parte. */
-type MontosGuardados = { monto: string | null; partes: ReadonlyMap<string, string> };
+/** Textos cifrados guardados de un movimiento: el monto, el de destino y, por categoría, el de cada parte. */
+type MontosGuardados = {
+  monto: string | null;
+  montoDestino: string | null;
+  partes: ReadonlyMap<string, string>;
+};
 
-const SIN_GUARDADOS: MontosGuardados = { monto: null, partes: new Map() };
+const SIN_GUARDADOS: MontosGuardados = { monto: null, montoDestino: null, partes: new Map() };
+
+/** Tipo y moneda de una cuenta, para las guardas del servicio. */
+export type DatosCuenta = { tipo: string; moneda: Moneda };
 
 function requerido<T>(valor: T | null, columna: string): T {
   if (valor === null) throw new Error(`movimientos_detalle.${columna} llegó nulo.`);
@@ -71,6 +85,11 @@ function aTipo(valor: string | null): TipoMovimiento {
   const tipo = TIPOS_MOVIMIENTO.find((t) => t === valor);
   if (!tipo) throw new Error(`Tipo de movimiento desconocido: ${valor}`);
   return tipo;
+}
+
+function aMoneda(valor: string | null): Moneda {
+  if (valor === null || !esMoneda(valor)) throw new Error(`Moneda desconocida: ${valor}`);
+  return valor;
 }
 
 function aRef(id: string | null, nombre: string | null): Ref | null {
@@ -140,7 +159,11 @@ export class MovimientosRepository {
       id,
       tipo: aTipo(fila.tipo),
       monto: this.cifrador.descifrar(fila.monto, contexto.movimiento(usuarioId, id)),
-      moneda: "COP",
+      moneda: aMoneda(fila.moneda),
+      montoDestino:
+        fila.monto_destino === null
+          ? null
+          : this.cifrador.descifrar(fila.monto_destino, contexto.montoDestino(usuarioId, id)),
       tasa: aTasa(fila.tasa),
       fecha: requerido(fila.fecha, "fecha"),
       descripcion: fila.descripcion,
@@ -165,6 +188,7 @@ export class MovimientosRepository {
     id: string,
     m: MovimientoEntrada,
     guardados: MontosGuardados,
+    tasa: string,
   ) {
     return {
       p_id: id,
@@ -180,6 +204,15 @@ export class MovimientosRepository {
       p_cuenta_origen_id: m.cuentaOrigenId,
       p_cuenta_destino_id: m.cuentaDestinoId,
       p_categoria_id: m.categoriaId,
+      p_monto_destino:
+        m.montoDestino === null
+          ? null
+          : this.cifrador.cifrarSiCambia(
+              m.montoDestino,
+              guardados.montoDestino,
+              contexto.montoDestino(usuarioId, id),
+            ),
+      p_tasa: tasa,
       p_partes:
         m.partes === null
           ? null
@@ -197,7 +230,11 @@ export class MovimientosRepository {
   /** Vacío si el movimiento no existe o es ajeno: la función de Postgres lo rechaza después. */
   private async montosGuardados(token: string, id: string): Promise<MontosGuardados> {
     const [movimiento, partes] = await Promise.all([
-      this.cliente(token).from("movimientos").select("monto").eq("id", id).maybeSingle(),
+      this.cliente(token)
+        .from("movimientos")
+        .select("monto, monto_destino")
+        .eq("id", id)
+        .maybeSingle(),
       this.cliente(token)
         .from("movimiento_partes")
         .select("categoria_id, monto")
@@ -207,8 +244,10 @@ export class MovimientosRepository {
     if (partes.error) throw traducir(partes.error);
     if (movimiento.data === null) return SIN_GUARDADOS;
     const filasPartes = partes.data as unknown as { categoria_id: string; monto: string }[];
+    const fila = movimiento.data as unknown as { monto: string; monto_destino: string | null };
     return {
-      monto: (movimiento.data as unknown as { monto: string }).monto,
+      monto: fila.monto,
+      montoDestino: fila.monto_destino,
       partes: new Map(filasPartes.map((p) => [p.categoria_id, p.monto])),
     };
   }
@@ -241,9 +280,16 @@ export class MovimientosRepository {
     return data === null ? null : this.aMovimiento(usuario.id, data as unknown as FilaDetalle);
   }
 
-  /** Devuelve el id del movimiento creado (lo genera la API). */
-  async registrar(usuario: UsuarioAutenticado, entrada: MovimientoEntrada): Promise<string> {
-    const args = this.argumentos(usuario.id, randomUUID(), entrada, SIN_GUARDADOS);
+  /**
+   * Devuelve el id del movimiento creado (lo genera la API). `tasa`: la
+   * implícita entre monedas (SPEC 10), o "1".
+   */
+  async registrar(
+    usuario: UsuarioAutenticado,
+    entrada: MovimientoEntrada,
+    tasa: string = TASA_UNITARIA,
+  ): Promise<string> {
+    const args = this.argumentos(usuario.id, randomUUID(), entrada, SIN_GUARDADOS, tasa);
     const { data, error } = await this.cliente(usuario.token).rpc(
       "registrar_movimiento",
       args as unknown as Funciones["registrar_movimiento"]["Args"],
@@ -256,9 +302,10 @@ export class MovimientosRepository {
     usuario: UsuarioAutenticado,
     id: string,
     entrada: MovimientoEntrada,
+    tasa: string = TASA_UNITARIA,
   ): Promise<void> {
     const guardados = await this.montosGuardados(usuario.token, id);
-    const args = this.argumentos(usuario.id, id, entrada, guardados);
+    const args = this.argumentos(usuario.id, id, entrada, guardados, tasa);
     const { error } = await this.cliente(usuario.token).rpc(
       "reemplazar_movimiento",
       args as unknown as Funciones["reemplazar_movimiento"]["Args"],
@@ -276,14 +323,23 @@ export class MovimientosRepository {
     usuario: UsuarioAutenticado,
     ids: readonly (string | null)[],
   ): Promise<Map<string, string>> {
+    const datos = await this.datosDeCuenta(usuario, ids);
+    return new Map([...datos].map(([id, d]) => [id, d.tipo]));
+  }
+
+  /** Tipo y moneda de cada cuenta de `ids` visible por RLS (SPEC 10). */
+  async datosDeCuenta(
+    usuario: UsuarioAutenticado,
+    ids: readonly (string | null)[],
+  ): Promise<Map<string, DatosCuenta>> {
     const informados = [...new Set(ids.filter((id): id is string => id !== null && id !== ""))];
     if (informados.length === 0) return new Map();
     const { data, error } = await this.cliente(usuario.token)
       .from("cuentas")
-      .select("id, tipo")
+      .select("id, tipo, moneda")
       .in("id", informados);
     if (error) throw traducir(error);
-    return new Map(data.map((f) => [f.id, f.tipo]));
+    return new Map(data.map((f) => [f.id, { tipo: f.tipo, moneda: aMoneda(f.moneda) }]));
   }
 
   /** Si el movimiento es el interés de un préstamo (`prestamos_intereses`). */
@@ -303,12 +359,16 @@ export class MovimientosRepository {
     const lista = `(${ids.join(",")})`;
     const { data, error } = await this.cliente(usuario.token)
       .from("movimientos")
-      .select("id, monto, cuenta_origen_id, cuenta_destino_id")
+      .select("id, monto, monto_destino, cuenta_origen_id, cuenta_destino_id")
       .or(`cuenta_origen_id.in.${lista},cuenta_destino_id.in.${lista}`);
     if (error) throw traducir(error);
     return data.map((m) => ({
       id: m.id,
       monto: this.cifrador.descifrar(m.monto, contexto.movimiento(usuario.id, m.id)),
+      montoDestino:
+        m.monto_destino === null
+          ? null
+          : this.cifrador.descifrar(m.monto_destino, contexto.montoDestino(usuario.id, m.id)),
       cuentaOrigenId: m.cuenta_origen_id,
       cuentaDestinoId: m.cuenta_destino_id,
     }));
