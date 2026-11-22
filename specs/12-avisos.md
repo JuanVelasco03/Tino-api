@@ -1,6 +1,6 @@
 # SPEC 12 — Avisos
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 02, SPEC 07, SPEC 08, SPEC 10, SPEC 11
 > **Fecha:** 2026-11-22
 > **Objetivo:** Que la API derive al leer los avisos de recurrentes por confirmar, cobros, deudas y precios manuales sin actualizar, según la antelación que elige el usuario por tipo, y guarde solo qué avisos marcó como leídos y esa antelación.
