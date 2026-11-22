@@ -6,6 +6,11 @@
  * cifrado por `CifradorMontos`; aquí se cifran al escribir y se descifran al
  * leer. Devuelve cuentas sin saldo (`CuentaGuardada`) y los efectos de los
  * movimientos para que el servicio calcule el saldo en el dominio (RN-01).
+ *
+ * Préstamos (SPEC 08): las cuentas de préstamo no son cuentas propias. Todas
+ * las lecturas y escrituras de este repositorio las excluyen, así que un
+ * préstamo en `/cuentas/:id` es una cuenta inexistente. Solo
+ * `listarPrestamos` las lee, para que el servicio las sume al patrimonio.
  */
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
@@ -19,11 +24,19 @@ import {
 } from "../../domain/cuenta/cuenta.js";
 import type { Naturaleza } from "../../domain/cuenta/naturaleza.js";
 import type { EfectoMovimiento } from "../../domain/cuenta/saldo.js";
+import {
+  TIPOS_PRESTAMO,
+  esTipoPrestamo,
+  type TipoPrestamo,
+} from "../../domain/prestamo/prestamo.js";
 import { CifradorMontos, contexto } from "../cifrado/montos.js";
 import { ClienteSupabase } from "./cliente.js";
 import type { Database, TablesInsert, TablesUpdate } from "./tipos.js";
 
 const COLUMNAS = "id, nombre, tipo, detalle, saldo_inicial, cupo, posicion, archivada_en";
+
+/** Lista de PostgREST para `.not("tipo", "in", …)`: excluye los préstamos. */
+const TIPOS_DE_PRESTAMO = `(${TIPOS_PRESTAMO.join(",")})`;
 
 type Fila = {
   id: string;
@@ -108,6 +121,7 @@ export class CuentasRepository {
     const { data, error } = await this.cliente(usuario.token)
       .from("cuentas")
       .select(COLUMNAS)
+      .not("tipo", "in", TIPOS_DE_PRESTAMO)
       .is("archivada_en", null)
       .order("posicion")
       .order("creado_en");
@@ -120,18 +134,20 @@ export class CuentasRepository {
     const { data, error } = await this.cliente(usuario.token)
       .from("cuentas")
       .select(COLUMNAS)
+      .not("tipo", "in", TIPOS_DE_PRESTAMO)
       .not("archivada_en", "is", null)
       .order("archivada_en", { ascending: false });
     if (error) throw traducir(error);
     return (data as Fila[]).map((f) => this.aCuenta(usuario.id, f));
   }
 
-  /** `null` si no existe o no es visible por RLS (cuenta ajena). */
+  /** `null` si no existe, no es visible por RLS (cuenta ajena) o es un préstamo. */
   async obtener(usuario: UsuarioAutenticado, id: string): Promise<CuentaGuardada | null> {
     const { data, error } = await this.cliente(usuario.token)
       .from("cuentas")
       .select(COLUMNAS)
       .eq("id", id)
+      .not("tipo", "in", TIPOS_DE_PRESTAMO)
       .maybeSingle();
     if (error) throw traducir(error);
     return data === null ? null : this.aCuenta(usuario.id, data as Fila);
@@ -162,6 +178,28 @@ export class CuentasRepository {
       cuentaOrigenId: m.cuenta_origen_id,
       cuentaDestinoId: m.cuenta_destino_id,
     }));
+  }
+
+  /** Cuentas de préstamo sin saldo: el servicio calcula su capital (RN-01) para el patrimonio. */
+  async listarPrestamos(
+    usuario: UsuarioAutenticado,
+  ): Promise<{ id: string; tipo: TipoPrestamo; saldoInicial: bigint }[]> {
+    const { data, error } = await this.cliente(usuario.token)
+      .from("cuentas")
+      .select("id, tipo, saldo_inicial")
+      .in("tipo", [...TIPOS_PRESTAMO]);
+    if (error) throw traducir(error);
+    return (data as { id: string; tipo: string; saldo_inicial: string }[]).map((f) => {
+      if (!esTipoPrestamo(f.tipo)) throw new Error(`Tipo de préstamo desconocido: ${f.tipo}`);
+      return {
+        id: f.id,
+        tipo: f.tipo,
+        saldoInicial: this.cifrador.descifrar(
+          f.saldo_inicial,
+          contexto.cuenta(usuario.id, f.id, "saldo_inicial"),
+        ),
+      };
+    });
   }
 
   private async obtenerExistente(usuario: UsuarioAutenticado, id: string): Promise<CuentaGuardada> {
@@ -206,6 +244,7 @@ export class CuentasRepository {
       .from("cuentas")
       .update(fila)
       .eq("id", id)
+      .not("tipo", "in", TIPOS_DE_PRESTAMO)
       .select("id");
     if (error) throw traducir(error);
     if (data.length === 0) throw new ErrorApi("CUENTA_NO_ENCONTRADA");
@@ -221,6 +260,7 @@ export class CuentasRepository {
       .from("cuentas")
       .select("saldo_inicial, cupo")
       .eq("id", id)
+      .not("tipo", "in", TIPOS_DE_PRESTAMO)
       .maybeSingle();
     if (error) throw traducir(error);
     if (data === null) throw new ErrorApi("CUENTA_NO_ENCONTRADA");
@@ -271,6 +311,7 @@ export class CuentasRepository {
       .from("cuentas")
       .delete()
       .eq("id", id)
+      .not("tipo", "in", TIPOS_DE_PRESTAMO)
       .select("id");
     // FK on delete restrict desde recurrentes (SPEC 07) o desde movimientos
     // (SPEC 04): con movimientos se archiva, no se elimina.

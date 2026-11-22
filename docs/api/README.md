@@ -13,12 +13,13 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 | Módulo | Documento | Spec de origen |
 |---|---|---|
 | Perfil | [`perfil.md`](perfil.md) | SPEC 02, SPEC 04 |
-| Cuentas | [`cuentas.md`](cuentas.md) | SPEC 03, SPEC 04, SPEC 07 |
-| Movimientos | [`movimientos.md`](movimientos.md) | SPEC 04, SPEC 07 |
+| Cuentas | [`cuentas.md`](cuentas.md) | SPEC 03, SPEC 04, SPEC 07, SPEC 08 |
+| Movimientos | [`movimientos.md`](movimientos.md) | SPEC 04, SPEC 07, SPEC 08 |
 | Captura rápida y sugerencias | [`captura.md`](captura.md) | SPEC 04 |
 | Reglas de categorización | [`reglas.md`](reglas.md) | SPEC 04 |
-| Resumen del mes | [`resumen.md`](resumen.md) | SPEC 06 |
+| Resumen del mes | [`resumen.md`](resumen.md) | SPEC 06, SPEC 08 |
 | Recurrentes | [`recurrentes.md`](recurrentes.md) | SPEC 07 |
+| Deudas y préstamos | [`prestamos.md`](prestamos.md) | SPEC 08 |
 
 ---
 

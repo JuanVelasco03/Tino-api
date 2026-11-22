@@ -21,6 +21,8 @@ import {
   validarCierre,
   validarRecurrente,
 } from "../domain/recurrente/validar.js";
+import { esTipoPrestamo } from "../domain/prestamo/prestamo.js";
+import { validarSinCuentaDePrestamo } from "../domain/prestamo/validar.js";
 import { CuentasRepository } from "../repositories/supabase/cuentas.repository.js";
 import { MovimientosRepository } from "../repositories/supabase/movimientos.repository.js";
 import { PerfilesRepository } from "../repositories/supabase/perfiles.repository.js";
@@ -89,6 +91,7 @@ export class RecurrentesService {
   async crear(usuario: UsuarioAutenticado, entrada: RecurrenteEntrada): Promise<RecurrenteDto> {
     const dia = await this.dia(usuario);
     this.validar(entrada, dia.hoy);
+    await this.rechazarPrestamos(usuario, entrada);
     await this.rechazarArchivadas(usuario, entrada);
     const id = await this.recurrentes.crear(usuario, entrada, {
       generarDesde: entrada.primerVencimiento,
@@ -109,6 +112,7 @@ export class RecurrentesService {
   ): Promise<RecurrenteDto> {
     const [dia, actual] = await Promise.all([this.dia(usuario), this.obtener(usuario, id)]);
     this.validar(entrada, dia.hoy, actual.plantilla);
+    await this.rechazarPrestamos(usuario, entrada);
     await this.rechazarArchivadas(usuario, entrada);
     await this.recurrentes.reemplazar(usuario, id, entrada, {
       generarDesde: cambiaCalendario(actual.plantilla, entrada)
@@ -201,6 +205,22 @@ export class RecurrentesService {
   private validarCierre(ocurrencia: ReturnType<typeof ocurrenciaEn>): void {
     const codigo = validarCierre(ocurrencia);
     if (codigo) throw new ErrorApi(codigo);
+  }
+
+  /** Una plantilla no toca cuentas de préstamo: sus movimientos nacen en Deudas (SPEC 08). */
+  private async rechazarPrestamos(
+    usuario: UsuarioAutenticado,
+    entrada: RecurrenteEntrada,
+  ): Promise<void> {
+    const tipos = await this.movimientos.tiposDeCuenta(usuario, [
+      entrada.cuentaOrigenId,
+      entrada.cuentaDestinoId,
+    ]);
+    const error = validarSinCuentaDePrestamo(entrada, (cuentaId) => {
+      const tipo = tipos.get(cuentaId);
+      return tipo !== undefined && esTipoPrestamo(tipo);
+    });
+    if (error) throw new ErrorApi(error.codigo, error.campo);
   }
 
   /**

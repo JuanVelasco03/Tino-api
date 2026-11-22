@@ -10,7 +10,7 @@
 import { Injectable } from "@nestjs/common";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UsuarioAutenticado } from "../../autenticacion/usuario.js";
-import { TIPOS_EN_ALCANCE, type TipoCuentaEnAlcance } from "../../domain/cuenta/cuenta.js";
+import { TIPOS_CON_PRESTAMO, type TipoCuentaConPrestamo } from "../../domain/cuenta/cuenta.js";
 import { TIPOS_MOVIMIENTO, type TipoMovimiento } from "../../domain/movimiento/movimiento.js";
 import type { MovimientoResumen, ParteResumen } from "../../domain/resumen/resumen.js";
 import { CifradorMontos, contexto } from "../cifrado/montos.js";
@@ -18,10 +18,10 @@ import { ClienteSupabase } from "./cliente.js";
 import { errorInterno } from "./errores.js";
 import type { Database } from "./tipos.js";
 
-/** Cuenta tal como la lee el resumen: también las archivadas. */
+/** Cuenta tal como la lee el resumen: también las archivadas y los préstamos (SPEC 08). */
 export type CuentaLeida = {
   id: string;
-  tipo: TipoCuentaEnAlcance;
+  tipo: TipoCuentaConPrestamo;
   saldoInicial: bigint;
   creadoEn: Date;
   archivadaEn: Date | null;
@@ -68,8 +68,8 @@ type FilaMovimiento = {
 
 type FilaParte = { movimiento_id: string; categoria_id: string; monto: string };
 
-function aTipoCuenta(valor: string): TipoCuentaEnAlcance {
-  const tipo = TIPOS_EN_ALCANCE.find((t) => t === valor);
+function aTipoCuenta(valor: string): TipoCuentaConPrestamo {
+  const tipo = TIPOS_CON_PRESTAMO.find((t) => t === valor);
   if (!tipo) throw new Error(`Tipo de cuenta desconocido: ${valor}`);
   return tipo;
 }

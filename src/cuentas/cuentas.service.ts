@@ -4,7 +4,7 @@ import { ErrorApi } from "../comun/error-api.js";
 import type { Cuenta, CuentaGuardada, ResumenCuentas } from "../domain/cuenta/cuenta.js";
 import type { Naturaleza } from "../domain/cuenta/naturaleza.js";
 import { agruparCuentas } from "../domain/cuenta/resumen.js";
-import { conSaldos } from "../domain/cuenta/saldo.js";
+import { calcularSaldo, conSaldos } from "../domain/cuenta/saldo.js";
 import { puedeArchivar, validarAlta, validarEdicion } from "../domain/cuenta/validar.js";
 import { fechaLocal } from "../domain/fecha/fecha-local.js";
 import { ZONA_HORARIA_POR_DEFECTO } from "../domain/perfil/perfil.js";
@@ -22,17 +22,26 @@ export class CuentasService {
     private readonly perfiles: PerfilesRepository,
   ) {}
 
-  /** Cuentas no archivadas agrupadas, con la fecha de hoy en la zona del perfil. */
+  /**
+   * Cuentas no archivadas agrupadas, con la fecha de hoy en la zona del perfil.
+   * Los préstamos no salen en los grupos, pero su capital entra en el
+   * patrimonio (SPEC 08).
+   */
   async listar(
     usuario: UsuarioAutenticado,
   ): Promise<{ resumen: ResumenCuentas; fechaSaldos: string }> {
-    const [cuentas, efectos, perfil] = await Promise.all([
+    const [cuentas, prestamos, efectos, perfil] = await Promise.all([
       this.cuentas.listar(usuario),
+      this.cuentas.listarPrestamos(usuario),
       this.cuentas.efectos(usuario),
       this.perfiles.leerPropio(usuario.token),
     ]);
+    const saldosPrestamos = prestamos.map((p) => ({
+      tipo: p.tipo,
+      saldo: calcularSaldo(p, efectos),
+    }));
     return {
-      resumen: agruparCuentas(conSaldos(cuentas, efectos)),
+      resumen: agruparCuentas(conSaldos(cuentas, efectos), saldosPrestamos),
       fechaSaldos: fechaLocal(new Date(), perfil?.zonaHoraria ?? ZONA_HORARIA_POR_DEFECTO),
     };
   }

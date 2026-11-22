@@ -114,6 +114,13 @@ export type Database = {
             referencedRelation: "cuentas";
             referencedColumns: ["id"];
           },
+          {
+            foreignKeyName: "cuentas_cambios_cuenta_id_fkey";
+            columns: ["cuenta_id"];
+            isOneToOne: false;
+            referencedRelation: "prestamos_detalle";
+            referencedColumns: ["id"];
+          },
         ];
       };
       movimiento_partes: {
@@ -303,6 +310,131 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "cuentas";
             referencedColumns: ["usuario_id", "id"];
+          },
+        ];
+      };
+      prestamos: {
+        Row: {
+          actualizado_en: string;
+          creado_en: string;
+          cuenta_id: string;
+          fecha_acordada: string | null;
+          tasa_mensual_cpb: number;
+          usuario_id: string;
+        };
+        Insert: {
+          actualizado_en?: string;
+          creado_en?: string;
+          cuenta_id: string;
+          fecha_acordada?: string | null;
+          tasa_mensual_cpb?: number;
+          usuario_id?: string;
+        };
+        Update: {
+          actualizado_en?: string;
+          creado_en?: string;
+          cuenta_id?: string;
+          fecha_acordada?: string | null;
+          tasa_mensual_cpb?: number;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "prestamos_cuenta_fkey";
+            columns: ["usuario_id", "cuenta_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+        ];
+      };
+      prestamos_cambios: {
+        Row: {
+          cambiado_en: string;
+          campo: string;
+          id: string;
+          prestamo_id: string;
+          usuario_id: string;
+          valor_anterior: string | null;
+          valor_nuevo: string | null;
+        };
+        Insert: {
+          cambiado_en?: string;
+          campo: string;
+          id?: string;
+          prestamo_id: string;
+          usuario_id: string;
+          valor_anterior?: string | null;
+          valor_nuevo?: string | null;
+        };
+        Update: {
+          cambiado_en?: string;
+          campo?: string;
+          id?: string;
+          prestamo_id?: string;
+          usuario_id?: string;
+          valor_anterior?: string | null;
+          valor_nuevo?: string | null;
+        };
+        Relationships: [];
+      };
+      prestamos_intereses: {
+        Row: {
+          creado_en: string;
+          movimiento_capital_id: string | null;
+          movimiento_id: string;
+          prestamo_id: string;
+          usuario_id: string;
+        };
+        Insert: {
+          creado_en?: string;
+          movimiento_capital_id?: string | null;
+          movimiento_id: string;
+          prestamo_id: string;
+          usuario_id?: string;
+        };
+        Update: {
+          creado_en?: string;
+          movimiento_capital_id?: string | null;
+          movimiento_id?: string;
+          prestamo_id?: string;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "prestamos_intereses_capital_fkey";
+            columns: ["usuario_id", "movimiento_capital_id"];
+            isOneToOne: false;
+            referencedRelation: "movimientos";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "prestamos_intereses_capital_fkey";
+            columns: ["usuario_id", "movimiento_capital_id"];
+            isOneToOne: false;
+            referencedRelation: "movimientos_detalle";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "prestamos_intereses_movimiento_fkey";
+            columns: ["usuario_id", "movimiento_id"];
+            isOneToOne: false;
+            referencedRelation: "movimientos";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "prestamos_intereses_movimiento_fkey";
+            columns: ["usuario_id", "movimiento_id"];
+            isOneToOne: false;
+            referencedRelation: "movimientos_detalle";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "prestamos_intereses_prestamo_fkey";
+            columns: ["usuario_id", "prestamo_id"];
+            isOneToOne: false;
+            referencedRelation: "prestamos";
+            referencedColumns: ["usuario_id", "cuenta_id"];
           },
         ];
       };
@@ -556,6 +688,17 @@ export type Database = {
           },
         ];
       };
+      prestamos_detalle: {
+        Row: {
+          creado_en: string | null;
+          fecha_acordada: string | null;
+          id: string | null;
+          nombre: string | null;
+          tasa_mensual_cpb: number | null;
+          tipo: string | null;
+        };
+        Relationships: [];
+      };
       recurrentes_detalle: {
         Row: {
           actualizado_en: string | null;
@@ -634,6 +777,22 @@ export type Database = {
         };
         Returns: string;
       };
+      crear_prestamo: {
+        Args: {
+          p_cuenta_id: string;
+          p_cuenta_propia_id: string;
+          p_descripcion: string;
+          p_fecha: string;
+          p_fecha_acordada: string;
+          p_monto: string;
+          p_movimiento_id: string;
+          p_nombre: string;
+          p_saldo_inicial: string;
+          p_tasa_mensual_cpb: number;
+          p_tipo: string;
+        };
+        Returns: string;
+      };
       eliminar_movimiento: { Args: { p_id: string }; Returns: undefined };
       foto_movimiento: { Args: { p_id: string }; Returns: Json };
       insertar_semilla: { Args: { p_usuario: string }; Returns: undefined };
@@ -653,6 +812,21 @@ export type Database = {
           p_tipo: string;
         };
         Returns: string;
+      };
+      registrar_abono: {
+        Args: {
+          p_capital: string;
+          p_capital_id: string;
+          p_categoria_interes_id: string;
+          p_cuenta_propia_id: string;
+          p_descripcion_capital: string;
+          p_descripcion_interes: string;
+          p_fecha: string;
+          p_interes: string;
+          p_interes_id: string;
+          p_prestamo_id: string;
+        };
+        Returns: undefined;
       };
       registrar_movimiento: {
         Args: {

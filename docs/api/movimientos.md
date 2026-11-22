@@ -1,6 +1,6 @@
 # Movimientos
 
-> **Spec de origen:** SPEC 04 (confirmados de recurrentes: SPEC 07) · **Necesidades:** `specs/necesidades/captura-rapida.md`
+> **Spec de origen:** SPEC 04 (confirmados de recurrentes: SPEC 07; movimientos de préstamo: SPEC 08) · **Necesidades:** `specs/necesidades/captura-rapida.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Gastos, ingresos y transferencias: registrar, listar por mes, editar y
@@ -9,7 +9,24 @@ refleja en la siguiente lectura). Toda edición y eliminación queda registrada
 en la base (RN-13), sin endpoint de lectura por ahora.
 
 **Hoy:** todo en COP (`moneda: "COP"`, `tasa: "1"`). **Todavía no:** USD y
-TRM, persona asociada (préstamos), recurrentes ni ajustes de saldo.
+TRM, persona asociada en la captura ni ajustes de saldo.
+
+### Movimientos de préstamo (SPEC 08)
+
+Los desembolsos, abonos, intereses y condonaciones de
+[`prestamos.md`](prestamos.md) son movimientos normales: salen en la lista y se
+editan o borran aquí, con historial (RN-13). Nacen solo desde Deudas:
+
+- `POST /movimientos` no acepta una cuenta de préstamo (`CUENTA_DE_PRESTAMO`).
+- `PUT` de un movimiento que toca un préstamo no cambia su `tipo` ni saca el
+  préstamo de su campo (`MOVIMIENTO_DE_PRESTAMO`). La cuenta propia puede
+  cambiar, pero no a otro préstamo (`CUENTA_DE_PRESTAMO`).
+- `PUT` del interés de un préstamo no cambia su `tipo`
+  (`MOVIMIENTO_DE_PRESTAMO`).
+- `PUT` o `DELETE` que deja negativo el capital de un préstamo:
+  `CAPITAL_NEGATIVO` (por ejemplo, borrar el desembolso cuando ya hay abonos).
+- Borrar el capital de un abono deja su interés en el historial del préstamo
+  como fila propia.
 
 ---
 
@@ -172,6 +189,7 @@ Errores (llega el primero):
 | 422 | `CATEGORIA_INVALIDA` | `categoriaId` o `partes` | No existe, es de otro usuario o es de otro tipo (categoría de ingreso en un gasto). |
 | 422 | `CUENTA_INVALIDA` | `cuentaOrigenId` o `cuentaDestinoId` | No existe o es de otro usuario. |
 | 409 | `CUENTA_ARCHIVADA` | `cuentaOrigenId` o `cuentaDestinoId` | La cuenta está archivada. |
+| 422 | `CUENTA_DE_PRESTAMO` | `cuentaOrigenId` o `cuentaDestinoId` | La cuenta es un préstamo: se registra desde Deudas ([`prestamos.md`](prestamos.md)). |
 
 ---
 
@@ -192,6 +210,9 @@ Errores: los del `POST`, más:
 |---|---|---|---|
 | 404 | `MOVIMIENTO_NO_ENCONTRADO` | — | No existe o es de otro usuario. |
 | 409 | `CUENTA_ARCHIVADA` | — | Alguna cuenta **actual** del movimiento está archivada: no se modifica. |
+| 422 | `MOVIMIENTO_DE_PRESTAMO` | `tipo` | Movimiento de préstamo que cambia de tipo o de préstamo, o interés que cambia de tipo. |
+| 422 | `CUENTA_DE_PRESTAMO` | `cuentaOrigenId` o `cuentaDestinoId` | La cuenta nueva es un préstamo. |
+| 422 | `CAPITAL_NEGATIVO` | — | El cambio deja un préstamo con capital negativo. |
 
 ---
 
@@ -213,6 +234,7 @@ variable, su estimado.
 |---|---|---|
 | 404 | `MOVIMIENTO_NO_ENCONTRADO` | No existe o es de otro usuario. |
 | 409 | `CUENTA_ARCHIVADA` | Alguna cuenta del movimiento está archivada. |
+| 422 | `CAPITAL_NEGATIVO` | Borrarlo deja un préstamo con capital negativo. |
 
 ---
 
@@ -242,6 +264,9 @@ variable, su estimado.
 | `CUENTA_INVALIDA` | 422 | `cuentaOrigenId` o `cuentaDestinoId` | La cuenta no existe. |
 | `CUENTA_ARCHIVADA` | 409 | según el caso | La cuenta está archivada. Restáurala para modificarla. |
 | `MOVIMIENTO_NO_ENCONTRADO` | 404 | — | El movimiento no existe. |
+| `CUENTA_DE_PRESTAMO` | 422 | la cuenta | Esa cuenta es un préstamo. Regístralo desde Deudas. |
+| `MOVIMIENTO_DE_PRESTAMO` | 422 | `tipo` | Este movimiento es de un préstamo: no cambia de tipo ni de préstamo. |
+| `CAPITAL_NEGATIVO` | 422 | — | El cambio deja el préstamo con capital negativo. |
 
 Más los comunes: `NO_AUTENTICADO`, `ENTRADA_INVALIDA`, `ERROR_INTERNO`.
 

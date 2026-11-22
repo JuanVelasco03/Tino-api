@@ -1,5 +1,5 @@
 import type { Cuenta, CuentaGuardada } from "./cuenta.js";
-import { efectoEnSaldo } from "./naturaleza.js";
+import { efectoEnSaldo, type TipoCuenta } from "./naturaleza.js";
 
 /** Lo mínimo de un movimiento para calcular saldos. `monto` siempre positivo. */
 export type EfectoMovimiento = {
@@ -15,7 +15,7 @@ export type EfectoMovimiento = {
  * deuda vigente: una salida la aumenta.
  */
 export function calcularSaldo(
-  cuenta: Pick<CuentaGuardada, "id" | "tipo" | "saldoInicial">,
+  cuenta: Pick<CuentaGuardada, "id" | "saldoInicial"> & { tipo: TipoCuenta },
   efectos: readonly EfectoMovimiento[],
 ): bigint {
   let saldo = cuenta.saldoInicial;
