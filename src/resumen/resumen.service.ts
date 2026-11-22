@@ -1,3 +1,4 @@
+import { esTipoPrestamo } from "../domain/prestamo/prestamo.js";
 import { Injectable } from "@nestjs/common";
 import type { UsuarioAutenticado } from "../autenticacion/usuario.js";
 import { ErrorApi } from "../comun/error-api.js";
@@ -76,7 +77,10 @@ export class ResumenService {
       fechaHoy,
       inicio: inicio(datos.cuentas),
       tieneMovimientos: lectura.movimientos.length > 0,
-      cuentasActivas: lectura.cuentas.filter((c) => c.archivadaEn === null).length,
+      // Los préstamos no son cuentas propias (SPEC 08): entran en el patrimonio, no aquí.
+      cuentasActivas: lectura.cuentas.filter(
+        (c) => c.archivadaEn === null && !esTipoPrestamo(c.tipo),
+      ).length,
       cantidadMovimientos: delMes.cantidadMovimientos,
       ingresos: aComparacionDto(delMes.ingresos),
       gastos: aComparacionDto(delMes.gastos),

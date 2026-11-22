@@ -93,7 +93,7 @@ describe("captura, sugerencias, reglas y perfil", () => {
         u = await fabrica.crear();
       });
 
-      it("un usuario nuevo: 9 categorías de gasto y 4 de ingreso en el orden de la semilla, listas vacías", async () => {
+      it("un usuario nuevo: 10 categorías de gasto y 5 de ingreso en el orden de la semilla, listas vacías", async () => {
         const c = await captura(u);
         expect(c.categorias.gasto.map((k) => k.nombre)).toEqual([
           "Comida",
@@ -105,12 +105,14 @@ describe("captura, sugerencias, reglas y perfil", () => {
           "Ocio",
           "Servicios",
           "Otros gastos",
+          "Intereses",
         ]);
         expect(c.categorias.ingreso.map((k) => k.nombre)).toEqual([
           "Salario",
           "Trabajo independiente",
           "Reembolso",
           "Otros ingresos",
+          "Intereses",
         ]);
         expect(c.categorias.gasto.every((k) => k.tipo === "gasto")).toBe(true);
         expect(c).toMatchObject({
@@ -227,7 +229,9 @@ describe("captura, sugerencias, reglas y perfil", () => {
         expect(frecuentes).toHaveLength(6);
         expect(frecuentes.slice(0, 2)).toEqual(["Almuerzo", "Tinto"]);
         expect(frecuentes).not.toContain("Viejo");
-      });
+        // 15 POST seguidos contra Supabase remoto; cada uno comprueba además
+        // que ninguna cuenta sea un préstamo (SPEC 08).
+      }, 15_000);
     });
 
     describe("GET /sugerencias y /reglas", () => {

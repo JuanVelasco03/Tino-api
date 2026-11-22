@@ -1,6 +1,6 @@
 # Cuentas
 
-> **Spec de origen:** SPEC 03 (saldo con movimientos y `CUENTA_CON_MOVIMIENTOS`: SPEC 04; `CUENTA_CON_RECURRENTES`: SPEC 07) · **Necesidades:** `specs/necesidades/cuentas.md`
+> **Spec de origen:** SPEC 03 (saldo con movimientos y `CUENTA_CON_MOVIMIENTOS`: SPEC 04; `CUENTA_CON_RECURRENTES`: SPEC 07; préstamos en el patrimonio: SPEC 08) · **Necesidades:** `specs/necesidades/cuentas.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Cuentas del usuario agrupadas en activos y pasivos, con saldos, totales y
@@ -8,8 +8,12 @@ patrimonio neto calculados por la API. Alta, edición, orden, archivo,
 restauración y borrado.
 
 **Hoy existen:** `efectivo`, `banco` y `tarjeta_credito` (sin ciclo), todas en
-COP. **Todavía no:** USD y TRM, inversiones, préstamos, deudas ni ciclo de la
-tarjeta (corte, pago límite). Los movimientos viven en
+COP. **Todavía no:** USD y TRM, inversiones, préstamos como líneas de esta
+pantalla ni ciclo de la tarjeta (corte, pago límite).
+
+**Préstamos y deudas con personas** (SPEC 08) viven en
+[`prestamos.md`](prestamos.md). No salen en los grupos ni en ninguna ruta de
+`/cuentas`, pero su capital entra en `patrimonioNeto` (campo `prestamos`). Los movimientos viven en
 [`movimientos.md`](movimientos.md). El cliente no debe dibujar datos
 de esas funciones como si vinieran de la API.
 
@@ -29,7 +33,7 @@ de esas funciones como si vinieran de la API.
 | [`POST /cuentas/:id/restaurar`](#post-cuentasidrestaurar) | `{ nombre? }` (opcional) | `200 CuentaDto` |
 
 `:id` es un UUID. Uno mal formado responde `400 ENTRADA_INVALIDA`; uno que no
-existe o es de otro usuario, `404 CUENTA_NO_ENCONTRADA`.
+existe, es de otro usuario o es el de un préstamo, `404 CUENTA_NO_ENCONTRADA`.
 
 ---
 
@@ -64,7 +68,11 @@ type ListaCuentasDto = {
   fechaSaldos: string;        // "YYYY-MM-DD": hoy en la zona horaria del perfil
   activos: GrupoCuentasDto;
   pasivos: GrupoCuentasDto;
-  patrimonioNeto: string;     // activos.total − pasivos.total; puede ser negativo
+  prestamos: {                // capital pendiente de los préstamos (SPEC 08); no salen en los grupos
+    teDeben: string;          // Σ préstamos otorgados
+    debes: string;            // Σ deudas contraídas, positiva
+  };
+  patrimonioNeto: string;     // activos.total − pasivos.total + prestamos.teDeben − prestamos.debes; puede ser negativo
 };
 ```
 
@@ -136,6 +144,7 @@ patrimonio.
       }
     ]
   },
+  "prestamos": { "teDeben": "0", "debes": "0" },
   "patrimonioNeto": "-1263979"
 }
 ```
@@ -147,6 +156,7 @@ patrimonio.
   "fechaSaldos": "2026-11-18",
   "activos": { "total": "0", "cuentas": [] },
   "pasivos": { "total": "0", "cuentas": [] },
+  "prestamos": { "teDeben": "0", "debes": "0" },
   "patrimonioNeto": "0"
 }
 ```
@@ -155,6 +165,9 @@ patrimonio.
   en web y celular. El cliente no reordena: dibuja el arreglo como llega.
 - Una cuenta nueva o restaurada aparece al final de su grupo.
 - `fechaSaldos` es la fecha a la que están los saldos («Saldos al 18 nov»).
+- `prestamos`: lo que te deben y lo que debes a personas (SPEC 08). Solo entra
+  en el patrimonio; el detalle está en [`GET /prestamos`](prestamos.md). Los
+  intereses causados no se suman.
 
 Errores: solo los comunes (`401`, `500`).
 
@@ -267,7 +280,8 @@ generando ocurrencias y confirmarlas responde `409 CUENTA_ARCHIVADA` (ver
 ## `PUT /cuentas/orden`
 
 Guarda el orden de **un grupo**. `ids` debe traer **todas** las cuentas no
-archivadas de ese grupo, cada una una sola vez, en el orden nuevo. Es atómico:
+archivadas de ese grupo (las de `GET /cuentas`, sin préstamos), cada una una
+sola vez, en el orden nuevo. Es atómico:
 si falla, el orden anterior queda intacto.
 
 ```json
@@ -278,7 +292,7 @@ si falla, el orden anterior queda intacto.
 
 | Estado | `codigo` | `campo` | Cuándo |
 |---|---|---|---|
-| 422 | `ORDEN_INVALIDO` | `ids` | Falta una cuenta del grupo, hay un id repetido, un id es del otro grupo, de una archivada o de otro usuario. |
+| 422 | `ORDEN_INVALIDO` | `ids` | Falta una cuenta del grupo, hay un id repetido, un id es del otro grupo, de una archivada, de un préstamo o de otro usuario. |
 | 400 | `ENTRADA_INVALIDA` | `naturaleza` o `ids.N` | `naturaleza` no es `activo`/`pasivo`, o un id no es UUID. |
 
 **Para el modo «Ordenar»:** mover una cuenta solo dentro de su grupo. Al

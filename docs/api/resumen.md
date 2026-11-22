@@ -1,6 +1,6 @@
 # Resumen del mes
 
-> **Spec de origen:** SPEC 06 · **Necesidades:** `specs/necesidades/resumen.md`
+> **Spec de origen:** SPEC 06 (préstamos en el patrimonio: SPEC 08) · **Necesidades:** `specs/necesidades/resumen.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Cifras de un mes comparadas con el anterior: ingresos, gastos, resultado y
@@ -67,7 +67,7 @@ type ResumenDto = {
   fechaHoy: string;                  // hoy en la zona del usuario
   inicio: string | null;             // día de creación de la cuenta más antigua; null sin cuentas
   tieneMovimientos: boolean;         // false → estado de día uno (todo el historial, no solo el mes)
-  cuentasActivas: number;            // no archivadas
+  cuentasActivas: number;            // no archivadas, sin préstamos
   cantidadMovimientos: number;       // del mes, de cualquier tipo (= GET /movimientos?mes=)
   ingresos: ComparacionDto;
   gastos: ComparacionDto;
@@ -155,6 +155,9 @@ type ResumenDto = {
 - **Ingresos / gastos:** suma de los movimientos `ingreso` / `gasto` con fecha
   en el mes, de todas las cuentas (archivadas incluidas). Las transferencias no
   cuentan (pago de tarjeta, compra de inversión, préstamo: RN-05 a RN-08).
+- **Préstamos** (SPEC 08): el desembolso y el capital de un abono son
+  transferencias y no cuentan. El interés cobrado es un ingreso y el pagado un
+  gasto (RN-09). Una condonación es un gasto con la categoría elegida (RN-17).
 - **Gasto por categoría:** un gasto con categoría suma a ella. Un gasto
   dividido suma cada parte a la categoría de la parte. Un gasto sin categoría
   ni partes suma a `sinCategoria`.
@@ -177,6 +180,9 @@ El patrimonio a una fecha se **calcula en cada consulta**, nunca se guarda
   sus movimientos con fecha ≤ ese día. Editar el saldo inicial hoy no cambia
   los cierres pasados.
 - Los activos suman y los pasivos (tarjeta) restan.
+- **Préstamos** (SPEC 08): cada préstamo es una cuenta y entra igual. Lo que te
+  deben suma y lo que debes resta. Los intereses causados no se suman (ver
+  [`prestamos.md`](prestamos.md)).
 
 `serie`: el patrimonio al último día de cada uno de los 11 meses anteriores al
 **mes actual** (no al mes consultado), más el de hoy. Se omiten los puntos

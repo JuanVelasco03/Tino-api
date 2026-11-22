@@ -25,6 +25,9 @@ export type ListaCuentasDto = {
   fechaSaldos: string;
   activos: GrupoCuentasDto;
   pasivos: GrupoCuentasDto;
+  /** Capital pendiente de los préstamos (SPEC 08): no salen en los grupos. */
+  prestamos: { teDeben: string; debes: string };
+  /** activos − pasivos + prestamos.teDeben − prestamos.debes. */
   patrimonioNeto: string;
 };
 
@@ -58,6 +61,10 @@ export function aListaCuentasDto(resumen: ResumenCuentas, fechaSaldos: string): 
     fechaSaldos,
     activos: aGrupoDto(resumen.activos),
     pasivos: aGrupoDto(resumen.pasivos),
+    prestamos: {
+      teDeben: resumen.prestamos.teDeben.toString(),
+      debes: resumen.prestamos.debes.toString(),
+    },
     patrimonioNeto: resumen.patrimonioNeto.toString(),
   };
 }

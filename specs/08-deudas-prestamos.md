@@ -1,6 +1,6 @@
 # SPEC 08 — Deudas y préstamos con personas
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 03, SPEC 04, SPEC 05, SPEC 06
 > **Fecha:** 2026-11-21
 > **Objetivo:** Que la API lleve préstamos otorgados y deudas contraídas con personas como cuentas propias (desembolsos, abonos con capital e interés aparte, intereses causados calculados y condonación como gasto), con su consolidado, su detalle y su efecto en el patrimonio.
@@ -633,62 +633,62 @@ Endpoint → N-xx:
 
 `H` es hoy en la zona del perfil. `H−n` es n días antes. Cuentas: Nequi (banco, saldo inicial `"1000000"`) y Bancolombia (banco, saldo inicial `"2000000"`).
 
-- [ ] `npm test`, `npm run lint` y `npm run typecheck` pasan.
-- [ ] `list_migrations` muestra la migración y el archivo existe en `supabase/migrations/`.
-- [ ] `get_advisors` (security) no reporta avisos sobre las tablas, la vista ni las funciones nuevas.
-- [ ] `test/aislamiento.e2e-spec.ts` pasa con las comprobaciones del paso 3.
-- [ ] Un perfil nuevo tiene las categorías «Intereses» de gasto y de ingreso. Un perfil existente también las tiene tras la migración.
-- [ ] `GET /prestamos` sin préstamos → `200` con `teDeben.total` `"0"`, `debes.total` `"0"`, `posicionNeta` `"0"` y `prestamos: []`.
-- [ ] `POST /prestamos` de un otorgado a «Camila» de `"600000"` desde Nequi, fecha `H−60`, `tasaMensual: "1"`, `fechaAcordada` `H−27`:
+- [x] `npm test`, `npm run lint` y `npm run typecheck` pasan.
+- [x] `list_migrations` muestra la migración y el archivo existe en `supabase/migrations/`.
+- [x] `get_advisors` (security) no reporta avisos sobre las tablas, la vista ni las funciones nuevas.
+- [x] `test/aislamiento.e2e-spec.ts` pasa con las comprobaciones del paso 3.
+- [x] Un perfil nuevo tiene las categorías «Intereses» de gasto y de ingreso. Un perfil existente también las tiene tras la migración.
+- [x] `GET /prestamos` sin préstamos → `200` con `teDeben.total` `"0"`, `debes.total` `"0"`, `posicionNeta` `"0"` y `prestamos: []`.
+- [x] `POST /prestamos` de un otorgado a «Camila» de `"600000"` desde Nequi, fecha `H−60`, `tasaMensual: "1"`, `fechaAcordada` `H−27`:
   - responde `201` con `estado: "te_debe"`, `capitalPendiente` `"600000"`, `desde` `H−60` y `vencido: true`;
   - Nequi queda en `"400000"` en `GET /cuentas`;
   - Camila no aparece en `activos`;
   - `prestamos.teDeben` es `"600000"`;
   - `patrimonioNeto` no cambia.
-- [ ] Repetir `POST /prestamos` con «camila» y el mismo tipo → `409 PRESTAMO_EXISTENTE`. Con `tipo: "deuda_contraida"`, responde `201`.
-- [ ] `GET /prestamos/:id/propuesta-abono?fecha=H−40&monto=112000` → `interes` `"4000"` y `capital` `"108000"`. Son 600.000 × 20 días × 1 % / 30 = 4.000.
-- [ ] `POST /prestamos/:id/abonos` con Nequi, fecha `H−40`, `capital: "100000"` e `interes: "12000"`:
+- [x] Repetir `POST /prestamos` con «camila» y el mismo tipo → `409 PRESTAMO_EXISTENTE`. Con `tipo: "deuda_contraida"`, responde `201`.
+- [x] `GET /prestamos/:id/propuesta-abono?fecha=H−40&monto=112000` → `interes` `"4000"` y `capital` `"108000"`. Son 600.000 × 20 días × 1 % / 30 = 4.000.
+- [x] `POST /prestamos/:id/abonos` con Nequi, fecha `H−40`, `capital: "100000"` e `interes: "12000"`:
   - responde `201`;
   - deja una transferencia «Abono de Camila» y un ingreso «Intereses de Camila» con la categoría «Intereses»;
   - Nequi queda en `"512000"`;
   - el detalle trae `capitalPendiente` `"500000"`, `interesesCobrados` `"12000"` e `interesesCausados` `"6667"`;
   - el historial trae dos filas: `+600000` (saldo `"600000"`) y `−100000` con interés `"12000"` (saldo `"500000"`).
-- [ ] `GET /resumen` del mes de `H−40` cuenta el interés como ingreso. No cuenta ni el desembolso ni el abono.
-- [ ] Un abono con `capital: "600000"` → `422 ABONO_EXCEDE_CAPITAL`. Con capital e interés en `"0"` → `400 ABONO_VACIO`. Con fecha `H−61` → `400 FECHA_ANTERIOR_AL_PRESTAMO`. Con Nequi archivada → `409 CUENTA_ARCHIVADA` y no crea ningún movimiento.
-- [ ] `POST /prestamos/:id/condonaciones { monto: "200000", categoriaId: <Otros gastos> }`:
+- [x] `GET /resumen` del mes de `H−40` cuenta el interés como ingreso. No cuenta ni el desembolso ni el abono.
+- [x] Un abono con `capital: "600000"` → `422 ABONO_EXCEDE_CAPITAL`. Con capital e interés en `"0"` → `400 ABONO_VACIO`. Con fecha `H−61` → `400 FECHA_ANTERIOR_AL_PRESTAMO`. Con Nequi archivada → `409 CUENTA_ARCHIVADA` y no crea ningún movimiento.
+- [x] `POST /prestamos/:id/condonaciones { monto: "200000", categoriaId: <Otros gastos> }`:
   - responde `201 MovimientoDto`, un `gasto` con fecha `H`;
   - el capital queda en `"300000"`;
   - `totalCondonado` es `"200000"`;
   - `patrimonioNeto` baja 200.000.
-- [ ] `DELETE /movimientos/:id` de esa condonación devuelve el capital a `"500000"` y deja una fila `eliminacion` en `movimientos_cambios`.
-- [ ] Condonar `"500000"`:
+- [x] `DELETE /movimientos/:id` de esa condonación devuelve el capital a `"500000"` y deja una fila `eliminacion` en `movimientos_cambios`.
+- [x] Condonar `"500000"`:
   - deja `estado: "saldado"`, `cierre: { fecha: H, forma: "condonacion" }` e `interesesCausados` `"0"`;
   - no crea un gasto por los intereses;
   - un nuevo abono o condonación → `409 PRESTAMO_SALDADO`.
-- [ ] `POST /prestamos/:id/desembolsos` de `"50000"` sobre el saldado:
+- [x] `POST /prestamos/:id/desembolsos` de `"50000"` sobre el saldado:
   - lo reabre en `te_debe` con capital `"50000"`;
   - `desde` es la fecha del desembolso.
-- [ ] Condonar sobre una `deuda_contraida` → `422 CONDONACION_NO_PERMITIDA`.
-- [ ] Una contraída de «Mamá» de `"900000"` hacia Bancolombia, sin tasa:
+- [x] Condonar sobre una `deuda_contraida` → `422 CONDONACION_NO_PERMITIDA`.
+- [x] Una contraída de «Mamá» de `"900000"` hacia Bancolombia, sin tasa:
   - aumenta Bancolombia a `"2900000"`;
   - `debes.total` es `"900000"` y `debes.conIntereses` es `false`;
   - `posicionNeta` es `te deben − 900000`.
   - Un abono de `"200000"` desde Bancolombia baja la deuda a `"700000"`.
-- [ ] `PATCH /prestamos/:id { fechaAcordada: null }` deja `vencido: false` y una fila `fecha_acordada` en `prestamos_cambios`. `PATCH { nombre: "Camila Ortiz" }` deja una fila `nombre`. `PATCH {}` → `400 SIN_CAMBIOS`.
-- [ ] `tasaMensual: "1.234"` → `400 TASA_INVALIDA`. Una `fechaAcordada` anterior a `fecha` → `400 FECHA_ACORDADA_ANTERIOR`.
-- [ ] `POST /movimientos` con la cuenta de Camila como destino → `422 CUENTA_DE_PRESTAMO`. Lo mismo con `POST /recurrentes`.
-- [ ] `PUT /movimientos/:id` del abono:
+- [x] `PATCH /prestamos/:id { fechaAcordada: null }` deja `vencido: false` y una fila `fecha_acordada` en `prestamos_cambios`. `PATCH { nombre: "Camila Ortiz" }` deja una fila `nombre`. `PATCH {}` → `400 SIN_CAMBIOS`.
+- [x] `tasaMensual: "1.234"` → `400 TASA_INVALIDA`. Una `fechaAcordada` anterior a `fecha` → `400 FECHA_ACORDADA_ANTERIOR`.
+- [x] `POST /movimientos` con la cuenta de Camila como destino → `422 CUENTA_DE_PRESTAMO`. Lo mismo con `POST /recurrentes`.
+- [x] `PUT /movimientos/:id` del abono:
   - si cambia el monto a `"80000"`, responde `200` y el capital sube 20.000;
   - si cambia el tipo a `gasto`, responde `422 MOVIMIENTO_DE_PRESTAMO`.
-- [ ] `DELETE /movimientos/:id` del desembolso de Camila con abonos vivos → `422 CAPITAL_NEGATIVO`.
-- [ ] `DELETE /movimientos/:id` del capital de un abono con interés deja el interés como fila `clase: "interes"` en el historial.
-- [ ] `PATCH /cuentas/:id` y `DELETE /cuentas/:id` con el id de Camila → `404 CUENTA_NO_ENCONTRADA`. `PUT /cuentas/orden` con solo Nequi y Bancolombia en `activo` → `204`.
-- [ ] `GET /resumen` → `patrimonio.hoy` coincide con `patrimonioNeto` de `GET /cuentas` (sin movimientos futuros).
-- [ ] Un id ajeno en cualquier ruta `/prestamos/:id` → `404 PRESTAMO_NO_ENCONTRADO`.
-- [ ] En la BD, los montos de los movimientos de préstamo cumplen `^v1\.`. `prestamos` no tiene columnas de monto.
-- [ ] Ninguna ruta devuelve texto de Postgres en `mensaje`.
-- [ ] Ningún archivo de `src/domain/` importa `@nestjs/*`, `zod` ni `@supabase/*`. Ningún monto ni tasa pasa por `number` en un cálculo.
-- [ ] `docs/api/prestamos.md` existe y `README.md` lo enlaza.
+- [x] `DELETE /movimientos/:id` del desembolso de Camila con abonos vivos → `422 CAPITAL_NEGATIVO`.
+- [x] `DELETE /movimientos/:id` del capital de un abono con interés deja el interés como fila `clase: "interes"` en el historial.
+- [x] `PATCH /cuentas/:id` y `DELETE /cuentas/:id` con el id de Camila → `404 CUENTA_NO_ENCONTRADA`. `PUT /cuentas/orden` con solo Nequi y Bancolombia en `activo` → `204`.
+- [x] `GET /resumen` → `patrimonio.hoy` coincide con `patrimonioNeto` de `GET /cuentas` (sin movimientos futuros).
+- [x] Un id ajeno en cualquier ruta `/prestamos/:id` → `404 PRESTAMO_NO_ENCONTRADO`.
+- [x] En la BD, los montos de los movimientos de préstamo cumplen `^v1\.`. `prestamos` no tiene columnas de monto.
+- [x] Ninguna ruta devuelve texto de Postgres en `mensaje`.
+- [x] Ningún archivo de `src/domain/` importa `@nestjs/*`, `zod` ni `@supabase/*`. Ningún monto ni tasa pasa por `number` en un cálculo.
+- [x] `docs/api/prestamos.md` existe y `README.md` lo enlaza.
 
 ## Decisiones
 

@@ -142,6 +142,7 @@ describe("/cuentas", () => {
           fechaSaldos: fechaLocal(new Date(), "America/Bogota"),
           activos: { total: "0", cuentas: [] },
           pasivos: { total: "0", cuentas: [] },
+          prestamos: { teDeben: "0", debes: "0" },
           patrimonioNeto: "0",
         });
       });

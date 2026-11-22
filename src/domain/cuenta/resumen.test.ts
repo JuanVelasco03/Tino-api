@@ -20,8 +20,24 @@ describe("agruparCuentas", () => {
     expect(agruparCuentas([])).toEqual({
       activos: { total: 0n, cuentas: [] },
       pasivos: { total: 0n, cuentas: [] },
+      prestamos: { teDeben: 0n, debes: 0n },
       patrimonioNeto: 0n,
     });
+  });
+
+  it("los préstamos no entran en los grupos y sí en el patrimonio (SPEC 08)", () => {
+    const resumen = agruparCuentas(
+      [cuenta({ id: "nequi", tipo: "banco", saldo: 400_000n, posicion: 0 })],
+      [
+        { tipo: "prestamo_otorgado", saldo: 600_000n },
+        { tipo: "prestamo_otorgado", saldo: 50_000n },
+        { tipo: "deuda_contraida", saldo: 900_000n },
+      ],
+    );
+    expect(resumen.activos.total).toBe(400_000n);
+    expect(resumen.pasivos.total).toBe(0n);
+    expect(resumen.prestamos).toEqual({ teDeben: 650_000n, debes: 900_000n });
+    expect(resumen.patrimonioNeto).toBe(150_000n);
   });
 
   it("separa por naturaleza y respeta posicion", () => {

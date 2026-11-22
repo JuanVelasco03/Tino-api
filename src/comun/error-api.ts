@@ -189,6 +189,58 @@ export const CATALOGO = {
     estado: 409,
     mensaje: "La cuenta tiene recurrentes. Cámbialos o elimínalos primero.",
   },
+  // Deudas y préstamos (SPEC 08)
+  PRESTAMO_NO_ENCONTRADO: { estado: 404, mensaje: "El préstamo no existe." },
+  PRESTAMO_EXISTENTE: {
+    estado: 409,
+    mensaje: "Ya tienes un préstamo con esa persona en ese sentido. Súmale un desembolso.",
+    campo: "nombre",
+  },
+  TASA_INVALIDA: {
+    estado: 400,
+    mensaje: "La tasa es un porcentaje entre 0 y 100, con hasta dos decimales.",
+    campo: "tasaMensual",
+  },
+  FECHA_ACORDADA_ANTERIOR: {
+    estado: 400,
+    mensaje: "La fecha acordada no puede ser anterior al préstamo.",
+    campo: "fechaAcordada",
+  },
+  ABONO_VACIO: {
+    estado: 400,
+    mensaje: "El abono tiene que ser mayor que cero.",
+    campo: "capital",
+  },
+  ABONO_EXCEDE_CAPITAL: {
+    estado: 422,
+    mensaje: "El abono a capital supera lo pendiente.",
+    campo: "capital",
+  },
+  FECHA_ANTERIOR_AL_PRESTAMO: {
+    estado: 400,
+    mensaje: "La fecha no puede ser anterior al préstamo.",
+    campo: "fecha",
+  },
+  PRESTAMO_SALDADO: { estado: 409, mensaje: "Este préstamo ya está saldado." },
+  CONDONACION_NO_PERMITIDA: { estado: 422, mensaje: "Solo se condona lo que te deben." },
+  CONDONACION_EXCEDE_CAPITAL: {
+    estado: 422,
+    mensaje: "No puedes condonar más de lo pendiente.",
+    campo: "monto",
+  },
+  CUENTA_DE_PRESTAMO: {
+    estado: 422,
+    mensaje: "Esa cuenta es un préstamo. Regístralo desde Deudas.",
+  },
+  MOVIMIENTO_DE_PRESTAMO: {
+    estado: 422,
+    mensaje: "Este movimiento es de un préstamo: no cambia de tipo ni de préstamo.",
+    campo: "tipo",
+  },
+  CAPITAL_NEGATIVO: {
+    estado: 422,
+    mensaje: "El cambio deja el préstamo con capital negativo.",
+  },
   NO_AUTENTICADO: { estado: 401, mensaje: "Inicia sesión para continuar." },
   ERROR_INTERNO: {
     estado: 500,

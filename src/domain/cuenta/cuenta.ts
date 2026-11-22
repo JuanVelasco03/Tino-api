@@ -1,6 +1,7 @@
+import { TIPOS_PRESTAMO, type TipoPrestamo } from "../prestamo/prestamo.js";
 import type { TipoCuenta } from "./naturaleza.js";
 
-/** Tipos que existen hoy en la base (SPEC 03). Subconjunto de `TipoCuenta`. */
+/** Tipos de las cuentas propias, visibles en Cuentas (SPEC 03). Subconjunto de `TipoCuenta`. */
 export type TipoCuentaEnAlcance = Extract<TipoCuenta, "efectivo" | "banco" | "tarjeta_credito">;
 
 export const TIPOS_EN_ALCANCE = [
@@ -8,6 +9,14 @@ export const TIPOS_EN_ALCANCE = [
   "banco",
   "tarjeta_credito",
 ] as const satisfies readonly TipoCuentaEnAlcance[];
+
+/** Todos los tipos que existen en la base: cuentas propias y préstamos (SPEC 08). */
+export type TipoCuentaConPrestamo = TipoCuentaEnAlcance | TipoPrestamo;
+
+export const TIPOS_CON_PRESTAMO = [
+  ...TIPOS_EN_ALCANCE,
+  ...TIPOS_PRESTAMO,
+] as const satisfies readonly TipoCuentaConPrestamo[];
 
 /** Montos en unidades menores (COP = pesos), `bigint`: sin coma flotante. */
 export type Cuenta = {
@@ -28,9 +37,16 @@ export type CuentaGuardada = Omit<Cuenta, "saldo">;
 
 export type GrupoCuentas = { total: bigint; cuentas: Cuenta[] };
 
+/** Capital pendiente de los préstamos (SPEC 08): no salen en los grupos, sí en el patrimonio. */
+export type TotalesPrestamos = { teDeben: bigint; debes: bigint };
+
+/** Cuenta de préstamo con su saldo (capital pendiente, RN-01). */
+export type SaldoPrestamo = { tipo: TipoPrestamo; saldo: bigint };
+
 export type ResumenCuentas = {
   activos: GrupoCuentas;
   pasivos: GrupoCuentas;
-  /** activos.total − pasivos.total; puede ser negativo. */
+  prestamos: TotalesPrestamos;
+  /** activos.total − pasivos.total + prestamos.teDeben − prestamos.debes; puede ser negativo. */
   patrimonioNeto: bigint;
 };

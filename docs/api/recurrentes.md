@@ -1,6 +1,6 @@
 # Recurrentes
 
-> **Spec de origen:** SPEC 07 · **Necesidades:** `specs/necesidades/recurrentes.md`
+> **Spec de origen:** SPEC 07 (`CUENTA_DE_PRESTAMO`: SPEC 08) · **Necesidades:** `specs/necesidades/recurrentes.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Plantillas de gastos, ingresos y transferencias que se repiten (arriendo,
@@ -242,6 +242,7 @@ Forma por tipo, igual que un movimiento:
 | 422 | `CATEGORIA_INVALIDA` | `categoriaId` | No existe, es de otro usuario o de otro tipo. |
 | 422 | `CUENTA_INVALIDA` | la cuenta | No existe o es de otro usuario. |
 | 409 | `CUENTA_ARCHIVADA` | la cuenta | La cuenta está archivada. |
+| 422 | `CUENTA_DE_PRESTAMO` | la cuenta | La cuenta es un préstamo: sus movimientos se registran desde Deudas ([`prestamos.md`](prestamos.md)). |
 
 ---
 
@@ -377,5 +378,6 @@ Reutilizados: `TIPO_MOVIMIENTO_INVALIDO`, `MONTO_REQUERIDO`, `MONTO_INVALIDO`,
 `ORIGEN_NO_PERMITIDO`, `DESTINO_NO_PERMITIDO`, `CUENTAS_IGUALES`,
 `CATEGORIA_NO_PERMITIDA`, `CATEGORIA_INVALIDA`, `CUENTA_INVALIDA`,
 `CUENTA_ARCHIVADA` (ver [`movimientos.md`](movimientos.md) y
-[`cuentas.md`](cuentas.md)). Más los comunes: `NO_AUTENTICADO`,
+[`cuentas.md`](cuentas.md)) y `CUENTA_DE_PRESTAMO` (ver
+[`prestamos.md`](prestamos.md)). Más los comunes: `NO_AUTENTICADO`,
 `ENTRADA_INVALIDA`, `ERROR_INTERNO`.

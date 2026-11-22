@@ -7,6 +7,10 @@
  * Montos cifrados (SPEC 05): el monto y el de cada parte se cifran con
  * `CifradorMontos` antes de llamar a las funciones y se descifran al leer. El
  * `id` del movimiento lo genera la API para atar el cifrado a la fila (AAD).
+ *
+ * Préstamos (SPEC 08): `tiposDeCuenta`, `esInteresDePrestamo` y `efectosDe`
+ * dan al servicio lo que necesita para `CUENTA_DE_PRESTAMO`,
+ * `MOVIMIENTO_DE_PRESTAMO` y `CAPITAL_NEGATIVO`.
  */
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
@@ -20,6 +24,7 @@ import {
   type Ref,
   type TipoMovimiento,
 } from "../../domain/movimiento/movimiento.js";
+import type { MovimientoConId } from "../../domain/prestamo/validar.js";
 import { CifradorMontos, contexto } from "../cifrado/montos.js";
 import { ClienteSupabase } from "./cliente.js";
 import { desdeFuncion, errorInterno } from "./errores.js";
@@ -264,5 +269,48 @@ export class MovimientosRepository {
   async eliminar(usuario: UsuarioAutenticado, id: string): Promise<void> {
     const { error } = await this.cliente(usuario.token).rpc("eliminar_movimiento", { p_id: id });
     if (error) throw traducir(error);
+  }
+
+  /** Tipo de cada cuenta de `ids` visible por RLS; una inexistente o ajena no aparece. */
+  async tiposDeCuenta(
+    usuario: UsuarioAutenticado,
+    ids: readonly (string | null)[],
+  ): Promise<Map<string, string>> {
+    const informados = [...new Set(ids.filter((id): id is string => id !== null && id !== ""))];
+    if (informados.length === 0) return new Map();
+    const { data, error } = await this.cliente(usuario.token)
+      .from("cuentas")
+      .select("id, tipo")
+      .in("id", informados);
+    if (error) throw traducir(error);
+    return new Map(data.map((f) => [f.id, f.tipo]));
+  }
+
+  /** Si el movimiento es el interés de un préstamo (`prestamos_intereses`). */
+  async esInteresDePrestamo(usuario: UsuarioAutenticado, id: string): Promise<boolean> {
+    const { data, error } = await this.cliente(usuario.token)
+      .from("prestamos_intereses")
+      .select("movimiento_id")
+      .eq("movimiento_id", id)
+      .maybeSingle();
+    if (error) throw traducir(error);
+    return data !== null;
+  }
+
+  /** Monto y cuentas de los movimientos que tocan alguna de las cuentas `ids`, descifrados. */
+  async efectosDe(usuario: UsuarioAutenticado, ids: readonly string[]): Promise<MovimientoConId[]> {
+    if (ids.length === 0) return [];
+    const lista = `(${ids.join(",")})`;
+    const { data, error } = await this.cliente(usuario.token)
+      .from("movimientos")
+      .select("id, monto, cuenta_origen_id, cuenta_destino_id")
+      .or(`cuenta_origen_id.in.${lista},cuenta_destino_id.in.${lista}`);
+    if (error) throw traducir(error);
+    return data.map((m) => ({
+      id: m.id,
+      monto: this.cifrador.descifrar(m.monto, contexto.movimiento(usuario.id, m.id)),
+      cuentaOrigenId: m.cuenta_origen_id,
+      cuentaDestinoId: m.cuenta_destino_id,
+    }));
   }
 }

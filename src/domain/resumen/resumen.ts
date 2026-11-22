@@ -2,7 +2,7 @@
  * Tipos del resumen del mes (SPEC 06). Montos en unidades menores, `bigint`.
  * Los porcentajes son enteros en décimas (274 = 27,4 %), sin coma flotante.
  */
-import type { TipoCuentaEnAlcance } from "../cuenta/cuenta.js";
+import type { TipoCuentaConPrestamo } from "../cuenta/cuenta.js";
 import type { TipoMovimiento } from "../movimiento/movimiento.js";
 
 export type Comparacion = {
@@ -44,10 +44,13 @@ export type MovimientoResumen = {
 
 export type ParteResumen = { movimientoId: string; categoriaId: string; monto: bigint };
 
-/** Cuenta para el patrimonio, archivadas incluidas. `creadaEl`: día local de `creado_en`. */
+/**
+ * Cuenta para el patrimonio, archivadas y préstamos incluidos (SPEC 08).
+ * `creadaEl`: día local de `creado_en`.
+ */
 export type CuentaPatrimonio = {
   id: string;
-  tipo: TipoCuentaEnAlcance;
+  tipo: TipoCuentaConPrestamo;
   saldoInicial: bigint;
   creadaEl: string;
 };
