@@ -7,7 +7,7 @@
  * Tino dev, nunca a datos reales.
  */
 import { randomUUID } from "node:crypto";
-import type { INestApplication } from "@nestjs/common";
+import type { INestApplication, Type } from "@nestjs/common";
 import { Test } from "@nestjs/testing";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import request, { type Response } from "supertest";
@@ -27,8 +27,15 @@ const opciones = { auth: { persistSession: false, autoRefreshToken: false } };
 
 export type UsuarioPrueba = { id: string; token: string; cliente: SupabaseClient };
 
-export async function crearApp(): Promise<INestApplication<App>> {
-  const modulo = await Test.createTestingModule({ imports: [AppModule] }).compile();
+/** Proveedor reemplazado en la app de prueba (p. ej. `TrmFuente` por una falsa, SPEC 09). */
+export type Reemplazo = { proveedor: Type | string | symbol; valor: unknown };
+
+export async function crearApp(reemplazos: Reemplazo[] = []): Promise<INestApplication<App>> {
+  const constructor = Test.createTestingModule({ imports: [AppModule] });
+  for (const { proveedor, valor } of reemplazos) {
+    constructor.overrideProvider(proveedor).useValue(valor);
+  }
+  const modulo = await constructor.compile();
   const app = modulo.createNestApplication<INestApplication<App>>();
   app.useGlobalPipes(crearPipeValidacion());
   await app.init();

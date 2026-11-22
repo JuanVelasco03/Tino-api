@@ -16,6 +16,9 @@
  * SPEC 08: cuentas de préstamo, `prestamos`, `prestamos_detalle`,
  * `prestamos_intereses` y `prestamos_cambios`; `crear_prestamo` y
  * `registrar_abono` (security definer) atacadas con datos ajenos.
+ *
+ * SPEC 09: la caché `trm`: solo SELECT e INSERT propios; UPDATE y DELETE
+ * no tienen política y afectan 0 filas.
  */
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -937,6 +940,73 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
         .from("prestamos_intereses")
         .insert({ movimiento_id: movimiento!.id, prestamo_id: datosA.prestamo });
       expect(errorInteres).not.toBeNull();
+    });
+  });
+
+  describe("trm (SPEC 09)", () => {
+    const filaA = { vigente_desde: "2026-01-10", vigente_hasta: "2026-01-12", valor_cent: 400000 };
+    const filaB = { vigente_desde: "2026-01-10", vigente_hasta: "2026-01-12", valor_cent: 410000 };
+
+    beforeAll(async () => {
+      const { error: errorA } = await a.cliente.from("trm").insert(filaA);
+      if (errorA) throw new Error(`No se pudo sembrar trm de A: ${errorA.message}`);
+      const { error: errorB } = await b.cliente.from("trm").insert(filaB);
+      if (errorB) throw new Error(`No se pudo sembrar trm de B: ${errorB.message}`);
+    });
+
+    it("cada usuario ve solo su fila de trm", async () => {
+      for (const [u, fila] of [
+        [a, filaA],
+        [b, filaB],
+      ] as const) {
+        const { data, error } = await u.cliente.from("trm").select("usuario_id, valor_cent");
+        expect(error).toBeNull();
+        expect(data).toEqual([{ usuario_id: u.id, valor_cent: fila.valor_cent }]);
+      }
+    });
+
+    it("INSERT con usuario_id ajeno falla", async () => {
+      const { error } = await a.cliente.from("trm").insert({
+        usuario_id: b.id,
+        vigente_desde: "2026-02-01",
+        vigente_hasta: "2026-02-01",
+        valor_cent: 1,
+      });
+      expect(error?.code).toBe("42501");
+      const { data } = await admin.from("trm").select("vigente_desde").eq("usuario_id", b.id);
+      expect(data).toEqual([{ vigente_desde: filaB.vigente_desde }]);
+    });
+
+    it("UPDATE y DELETE, propios o ajenos, afectan 0 filas", async () => {
+      for (const duenio of [a, b]) {
+        const { data: actualizadas, error: errorUpdate } = await a.cliente
+          .from("trm")
+          .update({ valor_cent: 1 })
+          .eq("usuario_id", duenio.id)
+          .select("usuario_id");
+        expect(errorUpdate).toBeNull();
+        expect(actualizadas).toEqual([]);
+
+        const { data: borradas, error: errorDelete } = await a.cliente
+          .from("trm")
+          .delete()
+          .eq("usuario_id", duenio.id)
+          .select("usuario_id");
+        expect(errorDelete).toBeNull();
+        expect(borradas).toEqual([]);
+      }
+
+      const { data: reales } = await admin
+        .from("trm")
+        .select("usuario_id, valor_cent")
+        .in("usuario_id", [a.id, b.id]);
+      expect(reales).toHaveLength(2);
+      expect(reales).toEqual(
+        expect.arrayContaining([
+          { usuario_id: a.id, valor_cent: filaA.valor_cent },
+          { usuario_id: b.id, valor_cent: filaB.valor_cent },
+        ]),
+      );
     });
   });
 });

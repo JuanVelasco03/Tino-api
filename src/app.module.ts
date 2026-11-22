@@ -12,6 +12,7 @@ import { ReglasModule } from "./reglas/reglas.module.js";
 import { CifradoModule } from "./repositories/cifrado/cifrado.module.js";
 import { SupabaseModule } from "./repositories/supabase/supabase.module.js";
 import { ResumenModule } from "./resumen/resumen.module.js";
+import { TrmModule } from "./trm/trm.module.js";
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { ResumenModule } from "./resumen/resumen.module.js";
     ResumenModule,
     RecurrentesModule,
     PrestamosModule,
+    TrmModule,
   ],
   providers: [
     // Guard global: toda ruta exige un token válido del proveedor (RF-03).

@@ -1,6 +1,6 @@
 # SPEC 09 — TRM oficial, automática e histórica
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 02, SPEC 06
 > **Fecha:** 2026-11-21
 > **Objetivo:** Que la API obtenga sola la TRM oficial de la fecha que necesite, la guarde en una caché por usuario y exponga la vigente en `GET /trm`, con la última conocida como respaldo cuando la fuente falla.

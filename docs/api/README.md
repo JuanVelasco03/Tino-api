@@ -20,6 +20,7 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 | Resumen del mes | [`resumen.md`](resumen.md) | SPEC 06, SPEC 08 |
 | Recurrentes | [`recurrentes.md`](recurrentes.md) | SPEC 07 |
 | Deudas y préstamos | [`prestamos.md`](prestamos.md) | SPEC 08 |
+| TRM | [`trm.md`](trm.md) | SPEC 09 |
 
 ---
 

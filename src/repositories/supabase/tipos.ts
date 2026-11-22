@@ -641,6 +641,30 @@ export type Database = {
           },
         ];
       };
+      trm: {
+        Row: {
+          obtenida_en: string;
+          usuario_id: string;
+          valor_cent: number;
+          vigente_desde: string;
+          vigente_hasta: string;
+        };
+        Insert: {
+          obtenida_en?: string;
+          usuario_id?: string;
+          valor_cent: number;
+          vigente_desde: string;
+          vigente_hasta: string;
+        };
+        Update: {
+          obtenida_en?: string;
+          usuario_id?: string;
+          valor_cent?: number;
+          vigente_desde?: string;
+          vigente_hasta?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       movimientos_detalle: {
