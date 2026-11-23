@@ -89,7 +89,9 @@ export class CuentasService {
     return this.conSaldo(usuario, await this.cuentas.actualizar(usuario, id, datos));
   }
 
-  eliminar(usuario: UsuarioAutenticado, id: string): Promise<void> {
+  /** Una cuenta con metas sin archivar no se elimina (SPEC 13, N-60). */
+  async eliminar(usuario: UsuarioAutenticado, id: string): Promise<void> {
+    await this.sinMetas(usuario, id);
     return this.cuentas.eliminar(usuario, id);
   }
 
@@ -97,9 +99,20 @@ export class CuentasService {
     return this.cuentas.reordenar(usuario, naturaleza, ids);
   }
 
-  /** Saldo cero; en una inversión, sin efectivo y sin posiciones abiertas (SPEC 10). */
+  /** CUENTA_CON_METAS si la cuenta tiene metas sin archivar (SPEC 13). */
+  private async sinMetas(usuario: UsuarioAutenticado, id: string): Promise<void> {
+    if (await this.cuentas.tieneMetasSinArchivar(usuario, id)) {
+      throw new ErrorApi("CUENTA_CON_METAS");
+    }
+  }
+
+  /**
+   * Saldo cero; en una inversión, sin efectivo y sin posiciones abiertas
+   * (SPEC 10); sin metas sin archivar (SPEC 13).
+   */
   async archivar(usuario: UsuarioAutenticado, id: string): Promise<Cuenta> {
     const actual = await this.conSaldo(usuario, await this.obtenerNoArchivada(usuario, id));
+    await this.sinMetas(usuario, id);
     const enCero =
       actual.inversion === null
         ? puedeArchivar(actual.saldo)

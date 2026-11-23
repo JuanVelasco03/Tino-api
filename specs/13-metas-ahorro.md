@@ -1,6 +1,6 @@
 # SPEC 13 — Metas de ahorro
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 03, SPEC 04, SPEC 05, SPEC 09, SPEC 10, SPEC 11
 > **Fecha:** 2026-11-22
 > **Objetivo:** Que la API lleve metas de ahorro sobre una cuenta, por apartado o con toda la cuenta, con su avance, ritmo, historial y cumplimiento calculados.

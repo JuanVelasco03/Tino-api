@@ -1,6 +1,6 @@
 # Cuentas
 
-> **Spec de origen:** SPEC 03 (saldo con movimientos y `CUENTA_CON_MOVIMIENTOS`: SPEC 04; `CUENTA_CON_RECURRENTES`: SPEC 07; préstamos en el patrimonio: SPEC 08; inversiones, `moneda` y TRM: SPEC 10) · **Necesidades:** `specs/necesidades/cuentas.md`
+> **Spec de origen:** SPEC 03 (saldo con movimientos y `CUENTA_CON_MOVIMIENTOS`: SPEC 04; `CUENTA_CON_RECURRENTES`: SPEC 07; préstamos en el patrimonio: SPEC 08; inversiones, `moneda` y TRM: SPEC 10; `CUENTA_CON_METAS`: SPEC 13) · **Necesidades:** `specs/necesidades/cuentas.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Cuentas del usuario agrupadas en activos y pasivos, con saldos, totales y
@@ -308,6 +308,7 @@ cambios. **La confirmación la pide el cliente** antes de llamar.
 | 404 | `CUENTA_NO_ENCONTRADA` | No existe o es de otro usuario. |
 | 409 | `CUENTA_CON_MOVIMIENTOS` | La cuenta tiene movimientos: no se borra, se archiva (con saldo cero). |
 | 409 | `CUENTA_CON_RECURRENTES` | Alguna plantilla recurrente usa la cuenta: hay que cambiarla o eliminarla primero (ver [`recurrentes.md`](recurrentes.md)). |
+| 409 | `CUENTA_CON_METAS` | La cuenta tiene metas de ahorro (también archivadas): hay que eliminarlas primero; con metas sin archivar, archivarlas o eliminarlas (ver [`metas.md`](metas.md)). |
 
 Si era la cuenta predeterminada del perfil, el perfil queda sin elegida.
 
@@ -352,6 +353,7 @@ Sin cuerpo. **200** `CuentaDto` con `archivadaEn`.
 
 | Estado | `codigo` | Cuándo |
 |---|---|---|
+| 409 | `CUENTA_CON_METAS` | La cuenta tiene metas de ahorro sin archivar: archívalas o elimínalas primero (ver [`metas.md`](metas.md)). |
 | 409 | `SALDO_NO_CERO` | El saldo no es cero. En una inversión: tiene efectivo o posiciones abiertas. |
 | 409 | `CUENTA_ARCHIVADA` | Ya estaba archivada. |
 | 404 | `CUENTA_NO_ENCONTRADA` | No existe o es de otro usuario. |
@@ -400,6 +402,7 @@ un nombre nuevo al usuario y reintentar con `{ "nombre": "Nequi vieja" }`.
 | `SALDO_NO_CERO` | 409 | — | Solo puedes archivar una cuenta con saldo cero. |
 | `CUENTA_CON_MOVIMIENTOS` | 409 | — | La cuenta tiene movimientos. Archívala en lugar de eliminarla. |
 | `CUENTA_CON_RECURRENTES` | 409 | — | La cuenta tiene recurrentes. Cámbialos o elimínalos primero. |
+| `CUENTA_CON_METAS` | 409 | — | La cuenta tiene metas: archívalas o elimínalas primero. |
 | `TIPO_DE_INVERSION_FIJO` | 422 | `tipo` | Una cuenta de inversión no cambia de tipo. |
 | `EFECTIVO_INSUFICIENTE` | 422 | — | No hay efectivo suficiente en la cuenta. Registra primero el fondeo. |
 

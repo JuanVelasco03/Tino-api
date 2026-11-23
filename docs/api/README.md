@@ -13,8 +13,8 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 | Módulo | Documento | Spec de origen |
 |---|---|---|
 | Perfil | [`perfil.md`](perfil.md) | SPEC 02, SPEC 04 |
-| Cuentas | [`cuentas.md`](cuentas.md) | SPEC 03, SPEC 04, SPEC 07, SPEC 08, SPEC 10 |
-| Movimientos | [`movimientos.md`](movimientos.md) | SPEC 04, SPEC 07, SPEC 08, SPEC 10 |
+| Cuentas | [`cuentas.md`](cuentas.md) | SPEC 03, SPEC 04, SPEC 07, SPEC 08, SPEC 10, SPEC 13 |
+| Movimientos | [`movimientos.md`](movimientos.md) | SPEC 04, SPEC 07, SPEC 08, SPEC 10, SPEC 13 |
 | Captura rápida y sugerencias | [`captura.md`](captura.md) | SPEC 04, SPEC 10 |
 | Reglas de categorización | [`reglas.md`](reglas.md) | SPEC 04 |
 | Resumen del mes | [`resumen.md`](resumen.md) | SPEC 06, SPEC 08, SPEC 10 |
@@ -23,6 +23,7 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 | TRM | [`trm.md`](trm.md) | SPEC 09 |
 | Inversiones | [`inversiones.md`](inversiones.md) | SPEC 10, SPEC 11 |
 | Avisos | [`avisos.md`](avisos.md) | SPEC 12 |
+| Metas de ahorro | [`metas.md`](metas.md) | SPEC 13 |
 
 ---
 
@@ -52,8 +53,8 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
   usuario.
 - **Porcentajes:** `number` entero (0–100). **Excepciones:** en
   [`resumen.md`](resumen.md) son enteros en décimas (`274` = 27,4 %), pueden ser
-  negativos o pasar de `1000`; en [`inversiones.md`](inversiones.md), enteros en
-  centésimas (`1248` = 12,48 %).
+  negativos o pasar de `1000`; en [`inversiones.md`](inversiones.md) y
+  [`metas.md`](metas.md), enteros en centésimas (`1248` = 12,48 %).
 - **Moneda:** los montos van en unidades menores de su moneda: pesos en COP,
   centavos en USD. Solo una cuenta de inversión puede estar en USD (ver
   [`inversiones.md`](inversiones.md)).

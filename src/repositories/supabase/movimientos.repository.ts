@@ -353,6 +353,17 @@ export class MovimientosRepository {
     return data !== null;
   }
 
+  /** Si el movimiento es la transferencia de un aporte a una meta (SPEC 13). */
+  async esAporteDeMeta(usuario: UsuarioAutenticado, id: string): Promise<boolean> {
+    const { data, error } = await this.cliente(usuario.token)
+      .from("metas_movimientos")
+      .select("id")
+      .eq("movimiento_id", id)
+      .maybeSingle();
+    if (error) throw traducir(error);
+    return data !== null;
+  }
+
   /** Monto y cuentas de los movimientos que tocan alguna de las cuentas `ids`, descifrados. */
   async efectosDe(usuario: UsuarioAutenticado, ids: readonly string[]): Promise<MovimientoConId[]> {
     if (ids.length === 0) return [];

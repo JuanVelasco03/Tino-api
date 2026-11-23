@@ -18,7 +18,9 @@ export type ColumnaMonto =
   | { tabla: "movimiento_partes"; columna: "monto" }
   | { tabla: "cuentas"; columna: "saldo_inicial" | "cupo" }
   | { tabla: "recurrentes"; columna: "monto" }
-  | { tabla: "inversion_operaciones"; columna: "cantidad" | "monto" };
+  | { tabla: "inversion_operaciones"; columna: "cantidad" | "monto" }
+  | { tabla: "metas"; columna: "objetivo" | "avance_cumplida" }
+  | { tabla: "metas_movimientos"; columna: "monto" };
 
 /** Dónde vive el valor. `idFila` de una parte: `<movimiento_id>:<categoria_id>`. */
 export type ContextoMonto = ColumnaMonto & { usuarioId: string; idFila: string };
@@ -61,6 +63,24 @@ export const contexto = {
     usuarioId,
     tabla: "inversion_operaciones",
     columna,
+    idFila: id,
+  }),
+  /** Objetivo o avance guardado al cumplirse de una meta (SPEC 13). */
+  meta: (
+    usuarioId: string,
+    id: string,
+    columna: "objetivo" | "avance_cumplida",
+  ): ContextoMonto => ({
+    usuarioId,
+    tabla: "metas",
+    columna,
+    idFila: id,
+  }),
+  /** Monto de un aporte o retiro sin transferencia (SPEC 13). */
+  aporteMeta: (usuarioId: string, id: string): ContextoMonto => ({
+    usuarioId,
+    tabla: "metas_movimientos",
+    columna: "monto",
     idFila: id,
   }),
 };

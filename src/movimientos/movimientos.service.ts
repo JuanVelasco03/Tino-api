@@ -94,7 +94,8 @@ export class MovimientosService {
   /**
    * Un movimiento de préstamo se edita sin cambiar de tipo ni de préstamo, y
    * sin dejar el capital negativo (SPEC 08). Ni la inversión que tocaba ni la
-   * que toca quedan con efectivo negativo (SPEC 10).
+   * que toca quedan con efectivo negativo (SPEC 10). La transferencia de un
+   * aporte a una meta no cambia de tipo (SPEC 13).
    */
   async reemplazar(
     usuario: UsuarioAutenticado,
@@ -104,7 +105,7 @@ export class MovimientosService {
     this.validar(entrada);
     const actual = await this.obtenerExistente(usuario, id);
     const anterior = cuentasDe(actual);
-    const [cuentas, esInteres] = await Promise.all([
+    const [cuentas, esInteres, esAporte] = await Promise.all([
       this.movimientos.datosDeCuenta(usuario, [
         anterior.cuentaOrigenId,
         anterior.cuentaDestinoId,
@@ -112,7 +113,12 @@ export class MovimientosService {
         entrada.cuentaDestinoId,
       ]),
       this.movimientos.esInteresDePrestamo(usuario, id),
+      this.movimientos.esAporteDeMeta(usuario, id),
     ]);
+    // La transferencia de un aporte sigue siendo transferencia (SPEC 13).
+    if (esAporte && entrada.tipo !== "transferencia") {
+      throw new ErrorApi("MOVIMIENTO_DE_META", "tipo");
+    }
     const tipos = tiposDe(cuentas);
     lanzar(
       validarCambioMovimiento(anterior, entrada, {

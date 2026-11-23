@@ -31,6 +31,10 @@
  *
  * SPEC 12: `avisos_config` y `avisos_leidos`: SELECT, INSERT y UPDATE propios;
  * sin DELETE; los `check` de opciones por tipo y de forma de la clave.
+ *
+ * SPEC 13: `metas`, `metas_movimientos` y `metas_cambios`: nadie ve, cambia ni
+ * borra lo ajeno; `crear_meta` y `registrar_aporte` atacadas con datos
+ * ajenos; los montos solo cifrados; el historial solo lo escriben triggers.
  */
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -1613,6 +1617,226 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
         expect(error?.code).toBe("23514");
         expect(error?.message).toContain("avisos_leidos_clave_check");
       }
+    });
+  });
+
+  describe("metas (SPEC 13)", () => {
+    type Datos = { cuenta: string; meta: string; aporte: string };
+    let datosA: Datos;
+    let datosB: Datos;
+    const hoy = new Date().toISOString().slice(0, 10);
+
+    function argumentosMeta(u: Usuario, cuenta: string, aporte: string | null) {
+      const meta = randomUUID();
+      return {
+        p_id: meta,
+        p_nombre: "Fondo",
+        p_cuenta_id: cuenta,
+        p_modo: "apartado",
+        p_objetivo: cifrador().cifrar(5000000n, contexto.meta(u.id, meta, "objetivo")),
+        p_fecha_meta: null,
+        p_fecha_meta_es_mes: false,
+        p_aporte:
+          aporte === null
+            ? null
+            : {
+                id: aporte,
+                monto: cifrador().cifrar(100000n, contexto.aporteMeta(u.id, aporte)),
+                fecha: hoy,
+              },
+      };
+    }
+
+    function argumentosAporte(u: Usuario, meta: string) {
+      const id = randomUUID();
+      return {
+        p_id: id,
+        p_meta_id: meta,
+        p_tipo: "aporte",
+        p_monto: cifrador().cifrar(50000n, contexto.aporteMeta(u.id, id)),
+        p_fecha: hoy,
+        p_motivo: null,
+        p_inicial: false,
+        p_movimiento_id: null,
+        p_monto_movimiento: null,
+        p_cuenta_origen_id: null,
+        p_descripcion: "Aporte a Fondo",
+      };
+    }
+
+    async function preparar(u: Usuario, nombreCuenta: string): Promise<Datos> {
+      const cuenta = randomUUID();
+      const { error: errorCuenta } = await u.cliente.from("cuentas").insert({
+        id: cuenta,
+        nombre: nombreCuenta,
+        tipo: "banco",
+        saldo_inicial: cifrador().cifrar(1000000n, contexto.cuenta(u.id, cuenta, "saldo_inicial")),
+      });
+      if (errorCuenta) throw new Error(`No se pudo crear la cuenta: ${errorCuenta.message}`);
+
+      const aporte = randomUUID();
+      const argumentos = argumentosMeta(u, cuenta, aporte);
+      const { error: errorMeta } = await u.cliente.rpc("crear_meta", argumentos);
+      if (errorMeta) throw new Error(`No se pudo crear la meta: ${errorMeta.message}`);
+
+      // Un cambio de nombre para que haya fila en metas_cambios.
+      const { error: errorNombre } = await u.cliente
+        .from("metas")
+        .update({ nombre: "Fondo de emergencia" })
+        .eq("id", argumentos.p_id);
+      if (errorNombre) throw new Error(`No se pudo renombrar la meta: ${errorNombre.message}`);
+
+      return { cuenta, meta: argumentos.p_id, aporte };
+    }
+
+    beforeAll(async () => {
+      datosA = await preparar(a, "Metas A");
+      datosB = await preparar(b, "Metas B");
+    });
+
+    it("nadie ve metas, aportes ni historial ajenos", async () => {
+      for (const [u, otro, propio] of [
+        [a, b, datosA],
+        [b, a, datosB],
+      ] as const) {
+        const { data: metas, error: errorMetas } = await u.cliente
+          .from("metas")
+          .select("id, usuario_id");
+        expect(errorMetas).toBeNull();
+        expect(metas).toEqual([{ id: propio.meta, usuario_id: u.id }]);
+
+        const { data: aportes, error: errorAportes } = await u.cliente
+          .from("metas_movimientos")
+          .select("id, usuario_id");
+        expect(errorAportes).toBeNull();
+        expect(aportes).toEqual([{ id: propio.aporte, usuario_id: u.id }]);
+
+        const { data: cambios, error: errorCambios } = await u.cliente
+          .from("metas_cambios")
+          .select("usuario_id, meta_id");
+        expect(errorCambios).toBeNull();
+        expect(cambios!.length).toBeGreaterThan(0);
+        expect(cambios!.every((c) => c.usuario_id === u.id && c.meta_id === propio.meta)).toBe(
+          true,
+        );
+        expect(cambios!.some((c) => c.usuario_id === otro.id)).toBe(false);
+      }
+    });
+
+    it("los montos solo se guardan cifrados", async () => {
+      const { data: meta } = await admin
+        .from("metas")
+        .select("objetivo")
+        .eq("id", datosA.meta)
+        .single();
+      expect(meta!.objetivo).toMatch(/^v1\./);
+      const { error } = await admin
+        .from("metas")
+        .update({ objetivo: "5000000" })
+        .eq("id", datosA.meta);
+      expect(error?.code).toBe("23514");
+      expect(error?.message).toContain("metas_objetivo_cifrado");
+      const { error: errorAporte } = await admin
+        .from("metas_movimientos")
+        .update({ monto: "100000" })
+        .eq("id", datosA.aporte);
+      expect(errorAporte?.code).toBe("23514");
+    });
+
+    it("crear_meta sobre la cuenta ajena falla por la FK", async () => {
+      const argumentos = argumentosMeta(a, datosB.cuenta, null);
+      const { error } = await a.cliente.rpc("crear_meta", argumentos);
+      expect(error?.code).toBe("23503");
+      expect(error?.message).toContain("metas_cuenta_fkey");
+      const { data } = await admin.from("metas").select("id").eq("id", argumentos.p_id);
+      expect(data).toEqual([]);
+    });
+
+    it("registrar_aporte sobre la meta ajena lanza META_NO_ENCONTRADA", async () => {
+      const argumentos = argumentosAporte(a, datosB.meta);
+      const { error } = await a.cliente.rpc("registrar_aporte", argumentos);
+      expect(error?.message).toBe("META_NO_ENCONTRADA");
+      const { data } = await admin.from("metas_movimientos").select("id").eq("id", argumentos.p_id);
+      expect(data).toEqual([]);
+    });
+
+    it("INSERT directo con usuario_id ajeno falla por RLS", async () => {
+      const meta = randomUUID();
+      const { error } = await a.cliente.from("metas").insert({
+        id: meta,
+        usuario_id: b.id,
+        nombre: "Intrusa",
+        cuenta_id: datosB.cuenta,
+        modo: "apartado",
+        objetivo: cifrador().cifrar(1n, contexto.meta(b.id, meta, "objetivo")),
+      });
+      expect(error?.code).toBe("42501");
+
+      const aporte = randomUUID();
+      const { error: errorAporte } = await a.cliente.from("metas_movimientos").insert({
+        id: aporte,
+        usuario_id: b.id,
+        meta_id: datosB.meta,
+        tipo: "aporte",
+        monto: cifrador().cifrar(1n, contexto.aporteMeta(b.id, aporte)),
+        fecha: hoy,
+      });
+      expect(errorAporte?.code).toBe("42501");
+    });
+
+    it("UPDATE y DELETE de metas y aportes ajenos afectan 0 filas", async () => {
+      const { data: meta, error: errorMeta } = await a.cliente
+        .from("metas")
+        .update({ nombre: "Intrusa" })
+        .eq("id", datosB.meta)
+        .select("id");
+      expect(errorMeta).toBeNull();
+      expect(meta).toEqual([]);
+
+      const { data: aporte, error: errorAporte } = await a.cliente
+        .from("metas_movimientos")
+        .delete()
+        .eq("id", datosB.aporte)
+        .select("id");
+      expect(errorAporte).toBeNull();
+      expect(aporte).toEqual([]);
+
+      const { data: borrada } = await a.cliente
+        .from("metas")
+        .delete()
+        .eq("id", datosB.meta)
+        .select("id");
+      expect(borrada).toEqual([]);
+
+      const { data: real } = await admin
+        .from("metas")
+        .select("nombre")
+        .eq("id", datosB.meta)
+        .single();
+      expect(real?.nombre).toBe("Fondo de emergencia");
+      const { count } = await admin
+        .from("metas_movimientos")
+        .select("id", { count: "exact", head: true })
+        .eq("id", datosB.aporte);
+      expect(count).toBe(1);
+    });
+
+    it("el historial no se escribe ni se borra a mano", async () => {
+      const { error } = await a.cliente.from("metas_cambios").insert({
+        meta_id: datosA.meta,
+        usuario_id: a.id,
+        entidad: "meta",
+        entidad_id: datosA.meta,
+        campo: "nombre",
+      });
+      expect(error?.code).toBe("42501");
+
+      const { data } = await a.cliente
+        .from("metas_cambios")
+        .delete()
+        .eq("meta_id", datosA.meta)
+        .select("id");
+      expect(data).toEqual([]);
     });
   });
 });

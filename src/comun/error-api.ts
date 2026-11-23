@@ -319,6 +319,90 @@ export const CATALOGO = {
     mensaje: "Elige una de las opciones de este tipo de aviso.",
     campo: "dias",
   },
+  // Metas de ahorro (SPEC 13). FECHA_FUTURA y ORIGEN_REQUERIDO se reusan.
+  META_NO_ENCONTRADA: { estado: 404, mensaje: "Esa meta no existe." },
+  APORTE_NO_ENCONTRADO: { estado: 404, mensaje: "Ese aporte no existe." },
+  NOMBRE_INVALIDO: {
+    estado: 400,
+    mensaje: "Escribe un nombre de 1 a 60 caracteres.",
+    campo: "nombre",
+  },
+  MODO_INVALIDO: { estado: 400, mensaje: "Elige apartado o toda la cuenta.", campo: "modo" },
+  MOTIVO_INVALIDO: {
+    estado: 400,
+    mensaje: "El motivo tiene de 1 a 80 caracteres.",
+    campo: "motivo",
+  },
+  CUENTA_NO_ADMITIDA: {
+    estado: 422,
+    mensaje: "Esa cuenta no admite este tipo de meta.",
+    campo: "cuentaId",
+  },
+  FECHA_META_PASADA: {
+    estado: 422,
+    mensaje: "La fecha meta no puede estar en el pasado.",
+    campo: "fechaMeta",
+  },
+  FECHA_ANTERIOR_A_META: {
+    estado: 422,
+    mensaje: "La fecha no puede ser anterior a la creación de la meta.",
+    campo: "fecha",
+  },
+  APORTE_INICIAL_NO_ADMITIDO: {
+    estado: 422,
+    mensaje: "Solo una meta por apartado lleva apartado inicial.",
+    campo: "aporteInicial",
+  },
+  SALDO_LIBRE_INSUFICIENTE: {
+    estado: 422,
+    mensaje: "La cuenta no tiene saldo libre suficiente.",
+    campo: "monto",
+  },
+  APARTADO_INSUFICIENTE: {
+    estado: 422,
+    mensaje: "Lo apartado no alcanza para ese retiro.",
+    campo: "monto",
+  },
+  ORIGEN_NO_ADMITIDO: {
+    estado: 422,
+    mensaje: "Un retiro no lleva cuenta de origen.",
+    campo: "cuentaOrigenId",
+  },
+  ORIGEN_FIJO: {
+    estado: 422,
+    mensaje: "No se puede agregar ni quitar la cuenta de origen.",
+    campo: "cuentaOrigenId",
+  },
+  RETIRO_NO_ADMITIDO: {
+    estado: 422,
+    mensaje: "Una meta de toda la cuenta no tiene retiros.",
+    campo: "tipo",
+  },
+  META_DE_INVERSION: { estado: 422, mensaje: "El avance de esta meta sigue a la inversión." },
+  META_CUMPLIDA: { estado: 409, mensaje: "La meta ya se cumplió." },
+  META_ARCHIVADA: { estado: 409, mensaje: "La meta está archivada." },
+  META_NO_CUMPLIDA: { estado: 409, mensaje: "Solo se archiva una meta cumplida." },
+  META_NO_ARCHIVADA: { estado: 409, mensaje: "La meta no está archivada." },
+  APARTADO_NO_CERO: { estado: 409, mensaje: "Retira lo apartado antes de archivar." },
+  META_CON_APORTES: {
+    estado: 409,
+    mensaje: "Una meta con aportes no cambia de modo.",
+    campo: "modo",
+  },
+  CUENTA_CON_META_EXCLUSIVA: {
+    estado: 409,
+    mensaje: "Esa cuenta ya tiene una meta de toda la cuenta.",
+    campo: "cuentaId",
+  },
+  CUENTA_CON_METAS: {
+    estado: 409,
+    mensaje: "La cuenta tiene metas: archívalas o elimínalas primero.",
+  },
+  MOVIMIENTO_DE_META: {
+    estado: 422,
+    mensaje: "La transferencia de un aporte no cambia de tipo.",
+    campo: "tipo",
+  },
   NO_AUTENTICADO: { estado: 401, mensaje: "Inicia sesión para continuar." },
   ERROR_INTERNO: {
     estado: 500,

@@ -340,6 +340,162 @@ export type Database = {
           },
         ];
       };
+      metas: {
+        Row: {
+          actualizado_en: string;
+          archivada_en: string | null;
+          avance_cumplida: string | null;
+          creado_en: string;
+          cuenta_id: string;
+          cumplida_en: string | null;
+          fecha_meta: string | null;
+          fecha_meta_es_mes: boolean;
+          id: string;
+          modo: string;
+          nombre: string;
+          objetivo: string;
+          usuario_id: string;
+        };
+        Insert: {
+          actualizado_en?: string;
+          archivada_en?: string | null;
+          avance_cumplida?: string | null;
+          creado_en?: string;
+          cuenta_id: string;
+          cumplida_en?: string | null;
+          fecha_meta?: string | null;
+          fecha_meta_es_mes?: boolean;
+          id: string;
+          modo: string;
+          nombre: string;
+          objetivo: string;
+          usuario_id?: string;
+        };
+        Update: {
+          actualizado_en?: string;
+          archivada_en?: string | null;
+          avance_cumplida?: string | null;
+          creado_en?: string;
+          cuenta_id?: string;
+          cumplida_en?: string | null;
+          fecha_meta?: string | null;
+          fecha_meta_es_mes?: boolean;
+          id?: string;
+          modo?: string;
+          nombre?: string;
+          objetivo?: string;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "metas_cuenta_fkey";
+            columns: ["usuario_id", "cuenta_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+        ];
+      };
+      metas_cambios: {
+        Row: {
+          cambiado_en: string;
+          campo: string;
+          entidad: string;
+          entidad_id: string;
+          id: string;
+          meta_id: string;
+          usuario_id: string;
+          valor_anterior: string | null;
+          valor_nuevo: string | null;
+        };
+        Insert: {
+          cambiado_en?: string;
+          campo: string;
+          entidad: string;
+          entidad_id: string;
+          id?: string;
+          meta_id: string;
+          usuario_id: string;
+          valor_anterior?: string | null;
+          valor_nuevo?: string | null;
+        };
+        Update: {
+          cambiado_en?: string;
+          campo?: string;
+          entidad?: string;
+          entidad_id?: string;
+          id?: string;
+          meta_id?: string;
+          usuario_id?: string;
+          valor_anterior?: string | null;
+          valor_nuevo?: string | null;
+        };
+        Relationships: [];
+      };
+      metas_movimientos: {
+        Row: {
+          actualizado_en: string;
+          creado_en: string;
+          fecha: string | null;
+          id: string;
+          inicial: boolean;
+          meta_id: string;
+          monto: string | null;
+          motivo: string | null;
+          movimiento_id: string | null;
+          tipo: string;
+          usuario_id: string;
+        };
+        Insert: {
+          actualizado_en?: string;
+          creado_en?: string;
+          fecha?: string | null;
+          id: string;
+          inicial?: boolean;
+          meta_id: string;
+          monto?: string | null;
+          motivo?: string | null;
+          movimiento_id?: string | null;
+          tipo: string;
+          usuario_id?: string;
+        };
+        Update: {
+          actualizado_en?: string;
+          creado_en?: string;
+          fecha?: string | null;
+          id?: string;
+          inicial?: boolean;
+          meta_id?: string;
+          monto?: string | null;
+          motivo?: string | null;
+          movimiento_id?: string | null;
+          tipo?: string;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "metas_movimientos_meta_fkey";
+            columns: ["usuario_id", "meta_id"];
+            isOneToOne: false;
+            referencedRelation: "metas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "metas_movimientos_movimiento_fkey";
+            columns: ["usuario_id", "movimiento_id"];
+            isOneToOne: false;
+            referencedRelation: "movimientos";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "metas_movimientos_movimiento_fkey";
+            columns: ["usuario_id", "movimiento_id"];
+            isOneToOne: false;
+            referencedRelation: "movimientos_detalle";
+            referencedColumns: ["usuario_id", "id"];
+          },
+        ];
+      };
       movimiento_partes: {
         Row: {
           categoria_id: string;
@@ -1032,6 +1188,19 @@ export type Database = {
         };
         Returns: string;
       };
+      crear_meta: {
+        Args: {
+          p_aporte: Json;
+          p_cuenta_id: string;
+          p_fecha_meta: string;
+          p_fecha_meta_es_mes: boolean;
+          p_id: string;
+          p_modo: string;
+          p_nombre: string;
+          p_objetivo: string;
+        };
+        Returns: string;
+      };
       crear_prestamo: {
         Args: {
           p_cuenta_id: string;
@@ -1098,6 +1267,22 @@ export type Database = {
           p_prestamo_id: string;
         };
         Returns: undefined;
+      };
+      registrar_aporte: {
+        Args: {
+          p_cuenta_origen_id: string;
+          p_descripcion: string;
+          p_fecha: string;
+          p_id: string;
+          p_inicial: boolean;
+          p_meta_id: string;
+          p_monto: string;
+          p_monto_movimiento: string;
+          p_motivo: string;
+          p_movimiento_id: string;
+          p_tipo: string;
+        };
+        Returns: string;
       };
       registrar_movimiento: {
         Args: {

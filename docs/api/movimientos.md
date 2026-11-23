@@ -1,6 +1,6 @@
 # Movimientos
 
-> **Spec de origen:** SPEC 04 (confirmados de recurrentes: SPEC 07; movimientos de préstamo: SPEC 08; fondeo de inversiones, `montoDestino` y tasa implícita: SPEC 10) · **Necesidades:** `specs/necesidades/captura-rapida.md`
+> **Spec de origen:** SPEC 04 (confirmados de recurrentes: SPEC 07; movimientos de préstamo: SPEC 08; fondeo de inversiones, `montoDestino` y tasa implícita: SPEC 10; aportes a metas: SPEC 13) · **Necesidades:** `specs/necesidades/captura-rapida.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Gastos, ingresos y transferencias: registrar, listar por mes, editar y
@@ -48,6 +48,18 @@ editan o borran aquí, con historial (RN-13). Nacen solo desde Deudas:
   `CAPITAL_NEGATIVO` (por ejemplo, borrar el desembolso cuando ya hay abonos).
 - Borrar el capital de un abono deja su interés en el historial del préstamo
   como fila propia.
+
+### Aportes a metas de ahorro (SPEC 13)
+
+Un aporte con cuenta de origen a una meta (ver [`metas.md`](metas.md)) es una
+transferencia normal del origen a la cuenta de la meta, sin categoría, con la
+descripción `Aporte a <meta>`. Sale en la lista y se edita o borra aquí, con
+historial (RN-13):
+
+- `PUT` cambia montos, fecha y cuentas, y la meta lo refleja: el aporte lee su
+  monto y su fecha de la transferencia. El `tipo` sigue siendo
+  `transferencia` (`MOVIMIENTO_DE_META`).
+- `DELETE` borra también el aporte de la meta.
 
 ---
 
@@ -240,6 +252,7 @@ Errores: los del `POST`, más:
 | 404 | `MOVIMIENTO_NO_ENCONTRADO` | — | No existe o es de otro usuario. |
 | 409 | `CUENTA_ARCHIVADA` | — | Alguna cuenta **actual** del movimiento está archivada: no se modifica. |
 | 422 | `MOVIMIENTO_DE_PRESTAMO` | `tipo` | Movimiento de préstamo que cambia de tipo o de préstamo, o interés que cambia de tipo. |
+| 422 | `MOVIMIENTO_DE_META` | `tipo` | Transferencia de un aporte a una meta que cambia de tipo. |
 | 422 | `CUENTA_DE_PRESTAMO` | `cuentaOrigenId` o `cuentaDestinoId` | La cuenta nueva es un préstamo. |
 | 422 | `CAPITAL_NEGATIVO` | — | El cambio deja un préstamo con capital negativo. |
 | 422 | `EFECTIVO_INSUFICIENTE` | — | El cambio deja el efectivo de una inversión, la de antes o la nueva, negativo algún día. |
@@ -298,6 +311,7 @@ variable, su estimado.
 | `CUENTA_DE_PRESTAMO` | 422 | la cuenta | Esa cuenta es un préstamo. Regístralo desde Deudas. |
 | `MOVIMIENTO_DE_PRESTAMO` | 422 | `tipo` | Este movimiento es de un préstamo: no cambia de tipo ni de préstamo. |
 | `CAPITAL_NEGATIVO` | 422 | — | El cambio deja el préstamo con capital negativo. |
+| `MOVIMIENTO_DE_META` | 422 | `tipo` | La transferencia de un aporte no cambia de tipo. |
 | `MONTO_DESTINO_REQUERIDO` | 400 | `montoDestino` | Escribe cuánto llegó a la cuenta de destino. |
 | `MONTO_DESTINO_NO_PERMITIDO` | 400 | `montoDestino` | Las dos cuentas usan la misma moneda: basta un monto. |
 | `CUENTA_DE_INVERSION` | 422 | la cuenta | Esa cuenta es de inversión: solo admite transferencias y se maneja desde Inversiones. |

@@ -335,17 +335,30 @@ export class CuentasRepository {
       .eq("id", id)
       .not("tipo", "in", TIPOS_DE_PRESTAMO)
       .select("id");
-    // FK on delete restrict desde recurrentes (SPEC 07) o desde movimientos
-    // (SPEC 04): con movimientos se archiva, no se elimina.
+    // FK on delete restrict desde recurrentes (SPEC 07), metas (SPEC 13) o
+    // movimientos (SPEC 04): con movimientos se archiva, no se elimina.
     if (error?.code === "23503") {
       throw new ErrorApi(
         /recurrentes_cuenta_(origen|destino)_fkey/.test(error.message)
           ? "CUENTA_CON_RECURRENTES"
-          : "CUENTA_CON_MOVIMIENTOS",
+          : error.message.includes("metas_cuenta_fkey")
+            ? "CUENTA_CON_METAS"
+            : "CUENTA_CON_MOVIMIENTOS",
       );
     }
     if (error) throw traducir(error);
     if (data.length === 0) throw new ErrorApi("CUENTA_NO_ENCONTRADA");
+  }
+
+  /** Si la cuenta tiene metas sin archivar (SPEC 13, N-60). */
+  async tieneMetasSinArchivar(usuario: UsuarioAutenticado, id: string): Promise<boolean> {
+    const { count, error } = await this.cliente(usuario.token)
+      .from("metas")
+      .select("id", { count: "exact", head: true })
+      .eq("cuenta_id", id)
+      .is("archivada_en", null);
+    if (error) throw traducir(error);
+    return (count ?? 0) > 0;
   }
 
   archivar(usuario: UsuarioAutenticado, id: string): Promise<CuentaGuardada> {
