@@ -56,7 +56,10 @@ export class CapturaRepository {
       .paraUsuario(token)
       .rpc("conceptos_frecuentes", { p_desde: desde, p_limite: limite });
     if (error) throw errorInterno(error);
-    return data.map((f) => ({ tipo: aTipo(f.tipo), descripcion: f.descripcion }));
+    // «Ajuste de saldo» (SPEC 14) no es un concepto que se capture.
+    return data
+      .filter((f) => f.tipo !== "ajuste")
+      .map((f) => ({ tipo: aTipo(f.tipo), descripcion: f.descripcion }));
   }
 
   /** Descripciones del tipo que empiezan por `prefijo`, sin mayúsculas ni tildes, por frecuencia. */

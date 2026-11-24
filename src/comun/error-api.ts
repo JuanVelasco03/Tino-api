@@ -403,6 +403,42 @@ export const CATALOGO = {
     mensaje: "La transferencia de un aporte no cambia de tipo.",
     campo: "tipo",
   },
+  // SPEC 14: detalle de cuenta y tarjeta con ciclo.
+  TIPO_NO_ADMITIDO: {
+    estado: 422,
+    mensaje: "Esta operación no está disponible para este tipo de cuenta.",
+  },
+  RANGO_INVALIDO: {
+    estado: 400,
+    mensaje: "La fecha final no puede ser anterior a la inicial.",
+    campo: "hasta",
+  },
+  SIN_DIFERENCIA: {
+    estado: 422,
+    mensaje: "El saldo contado es igual al de TINO: no hay nada que ajustar.",
+    campo: "saldoReal",
+  },
+  MOVIMIENTO_DE_AJUSTE: {
+    estado: 422,
+    mensaje: "Un ajuste no cambia de tipo, y ningún movimiento se convierte en ajuste.",
+    campo: "tipo",
+  },
+  DIA_INVALIDO: { estado: 400, mensaje: "Elige un día entre 1 y 31." },
+  CUENTA_PAGO_INVALIDA: {
+    estado: 422,
+    mensaje: "Elige una cuenta de efectivo o banco activa.",
+    campo: "tarjeta.cuentaPagoId",
+  },
+  CONDICIONES_REQUERIDAS: {
+    estado: 400,
+    mensaje: "La tarjeta necesita día de corte y día de pago.",
+    campo: "tarjeta",
+  },
+  CONDICIONES_NO_PERMITIDAS: {
+    estado: 400,
+    mensaje: "Solo las tarjetas tienen condiciones.",
+    campo: "tarjeta",
+  },
   NO_AUTENTICADO: { estado: 401, mensaje: "Inicia sesión para continuar." },
   ERROR_INTERNO: {
     estado: 500,

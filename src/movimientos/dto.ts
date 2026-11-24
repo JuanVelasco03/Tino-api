@@ -3,11 +3,12 @@
  * en unidades menores; el signo por tipo lo pone el cliente.
  */
 import type { Moneda } from "../domain/inversion/inversion.js";
-import type { Movimiento, Ref, TipoMovimiento } from "../domain/movimiento/movimiento.js";
+import type { Movimiento, Ref, TipoMovimientoGuardado } from "../domain/movimiento/movimiento.js";
 
 export type MovimientoDto = {
   id: string;
-  tipo: TipoMovimiento;
+  /** "ajuste" (SPEC 14): una sola cuenta; + con cuentaDestino, − con cuentaOrigen. */
+  tipo: TipoMovimientoGuardado;
   monto: string;
   /** La del origen, o la del destino en un ingreso (SPEC 10). */
   moneda: Moneda;

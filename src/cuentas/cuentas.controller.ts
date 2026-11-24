@@ -43,18 +43,31 @@ export class CuentasController {
     return { cuentas: cuentas.map(aCuentaDto) };
   }
 
+  /** Una cuenta, también archivada (SPEC 14). Un préstamo o una ajena: 404. */
+  @Get(":id")
+  async obtener(
+    @Usuario() usuario: UsuarioAutenticado,
+    @Param("id", { schema: idCuenta }) id: string,
+  ): Promise<CuentaDto> {
+    return aCuentaDto(await this.cuentas.obtener(usuario, id));
+  }
+
   @Post()
   async crear(
     @Usuario() usuario: UsuarioAutenticado,
     @Body({ schema: cuerpoAlta }) cuerpo: CuerpoAlta,
   ): Promise<CuentaDto> {
-    const cuenta = await this.cuentas.crear(usuario, {
-      nombre: cuerpo.nombre,
-      tipo: cuerpo.tipo,
-      detalle: cuerpo.detalle ?? null,
-      saldoInicial: cuerpo.saldoInicial,
-      cupo: cuerpo.cupo ?? null,
-    });
+    const cuenta = await this.cuentas.crear(
+      usuario,
+      {
+        nombre: cuerpo.nombre,
+        tipo: cuerpo.tipo,
+        detalle: cuerpo.detalle ?? null,
+        saldoInicial: cuerpo.saldoInicial,
+        cupo: cuerpo.cupo ?? null,
+      },
+      cuerpo.tarjeta,
+    );
     return aCuentaDto(cuenta);
   }
 
@@ -73,7 +86,8 @@ export class CuentasController {
     @Param("id", { schema: idCuenta }) id: string,
     @Body({ schema: cuerpoEdicion }) cuerpo: CuerpoEdicion,
   ): Promise<CuentaDto> {
-    return aCuentaDto(await this.cuentas.editar(usuario, id, cuerpo));
+    const { tarjeta, ...datos } = cuerpo;
+    return aCuentaDto(await this.cuentas.editar(usuario, id, datos, tarjeta));
   }
 
   @Delete(":id")

@@ -113,6 +113,7 @@ describe("/resumen", () => {
         tipo: "tarjeta_credito",
         saldoInicial: "0",
         cupo: "4000000",
+        tarjeta: { diaCorte: 15, diaPago: 30 },
       });
       await fecharCreacion(nequi.id);
       await fecharCreacion(tarjeta.id);

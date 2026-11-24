@@ -22,6 +22,8 @@ import { InversionesRepository } from "../repositories/supabase/inversiones.repo
 import { PerfilesRepository } from "../repositories/supabase/perfiles.repository.js";
 import { PreciosService } from "../precios/precios.service.js";
 import { TrmService } from "../trm/trm.service.js";
+import { tieneDetalle } from "../domain/cuenta/cuenta.js";
+import { validarCondiciones, type CondicionesEntrada } from "../domain/tarjeta/validar.js";
 
 const SIN_TRM: TrmResuelta = { trm: null, desactualizada: false };
 const SIN_DATOS: InversionPatrimonio = { activos: [], operaciones: [], precios: [] };
@@ -69,24 +71,85 @@ export class CuentasService {
     return this.aMercado(usuario, conSaldos(cuentas, efectos), undefined, true);
   }
 
-  async crear(usuario: UsuarioAutenticado, datos: DatosAlta): Promise<Cuenta> {
+  /** Una cuenta, también archivada (SPEC 14). */
+  async obtener(usuario: UsuarioAutenticado, id: string): Promise<Cuenta> {
+    return this.conSaldo(usuario, await this.obtenerExistente(usuario, id));
+  }
+
+  /**
+   * Una tarjeta nace con sus condiciones: día de corte y día de pago
+   * obligatorios (SPEC 14). Otra cuenta no las lleva.
+   */
+  async crear(
+    usuario: UsuarioAutenticado,
+    datos: DatosAlta,
+    condiciones?: CondicionesEntrada,
+  ): Promise<Cuenta> {
     const codigo = validarAlta(datos);
     if (codigo) throw new ErrorApi(codigo);
-    return this.conSaldo(usuario, await this.cuentas.crear(usuario, datos));
+    if (datos.tipo !== "tarjeta_credito") {
+      if (condiciones !== undefined) throw new ErrorApi("CONDICIONES_NO_PERMITIDAS");
+      return this.conSaldo(usuario, await this.cuentas.crear(usuario, datos));
+    }
+    if (condiciones === undefined) throw new ErrorApi("CONDICIONES_REQUERIDAS");
+    await this.validarCondiciones(usuario, condiciones, true);
+    const creada = await this.cuentas.crearTarjeta(usuario, datos, {
+      diaCorte: condiciones.diaCorte!,
+      diaPago: condiciones.diaPago!,
+      tasaMensualCpb: condiciones.tasaMensual ?? null,
+      cuotaManejo: condiciones.cuotaManejo ?? null,
+      cuentaPagoId: condiciones.cuentaPagoId ?? null,
+    });
+    return this.conSaldo(usuario, creada);
+  }
+
+  /**
+   * Rangos y obligatoriedad (dominio) y cuenta de pago: efectivo o banco,
+   * propia y activa. La base lo vuelve a comprobar (`validar_tarjeta`).
+   */
+  private async validarCondiciones(
+    usuario: UsuarioAutenticado,
+    condiciones: CondicionesEntrada,
+    requiereDias: boolean,
+  ): Promise<void> {
+    const error = validarCondiciones(condiciones, requiereDias);
+    if (error) throw new ErrorApi(error.codigo, error.campo);
+    const pagoId = condiciones.cuentaPagoId;
+    if (pagoId === undefined || pagoId === null) return;
+    const pago = await this.cuentas.obtener(usuario, pagoId);
+    if (!pago || !tieneDetalle(pago.tipo) || pago.archivadaEn !== null) {
+      throw new ErrorApi("CUENTA_PAGO_INVALIDA");
+    }
   }
 
   /**
    * Una inversión no cambia de tipo ni tiene cupo, y su saldo inicial no puede
    * dejar el efectivo negativo en ningún día (SPEC 10, N-65).
    */
-  async editar(usuario: UsuarioAutenticado, id: string, datos: DatosEdicion): Promise<Cuenta> {
+  async editar(
+    usuario: UsuarioAutenticado,
+    id: string,
+    datos: DatosEdicion,
+    condiciones?: CondicionesEntrada,
+  ): Promise<Cuenta> {
     const actual = await this.obtenerNoArchivada(usuario, id);
     const codigo = validarEdicion(actual, datos);
     if (codigo) throw new ErrorApi(codigo);
     if (actual.tipo === TIPO_INVERSION && datos.saldoInicial !== undefined) {
       await this.lineaDeTiempo.validar(usuario, id, { saldoInicial: datos.saldoInicial });
     }
-    return this.conSaldo(usuario, await this.cuentas.actualizar(usuario, id, datos));
+    if (condiciones !== undefined) {
+      if (actual.tipo !== "tarjeta_credito") throw new ErrorApi("CONDICIONES_NO_PERMITIDAS");
+      // La primera vez que una tarjeta recibe condiciones, los días son obligatorios.
+      const requiereDias = !(await this.cuentas.tieneCondiciones(usuario, id));
+      await this.validarCondiciones(usuario, condiciones, requiereDias);
+      await this.cuentas.guardarCondiciones(usuario, id, condiciones);
+    }
+    const sinCambiosDeCuenta = Object.values(datos).every((v) => v === undefined);
+    const guardada = sinCambiosDeCuenta
+      ? await this.obtenerExistente(usuario, id)
+      : await this.cuentas.actualizar(usuario, id, datos);
+    return this.conSaldo(usuario, guardada);
   }
 
   /** Una cuenta con metas sin archivar no se elimina (SPEC 13, N-60). */

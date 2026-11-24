@@ -5,7 +5,7 @@
  */
 import { z } from "zod";
 import { esFechaValida, esMesValido } from "../domain/fecha/mes.js";
-import { TIPOS_MOVIMIENTO } from "../domain/movimiento/movimiento.js";
+import { TIPOS_MOVIMIENTO, TIPOS_MOVIMIENTO_GUARDADO } from "../domain/movimiento/movimiento.js";
 
 /** Entero en unidades menores, como string. Ausente → MONTO_REQUERIDO; mal formado → MONTO_INVALIDO. */
 const monto = z
@@ -64,15 +64,22 @@ const campos = {
   partes,
 };
 
-/** POST: sin fecha, hoy en la zona del perfil. */
+/** POST: sin fecha, hoy en la zona del perfil. Un ajuste no se crea aquí (SPEC 14). */
 export const cuerpoAlta = z.object(
   { ...campos, fecha: fecha.optional().transform((f) => f ?? null) },
   { error: "ENTRADA_INVALIDA" },
 );
 export type CuerpoAlta = z.output<typeof cuerpoAlta>;
 
-/** PUT: reemplazo completo, fecha obligatoria. */
-export const cuerpoReemplazo = z.object({ ...campos, fecha }, { error: "ENTRADA_INVALIDA" });
+/** PUT: reemplazo completo, fecha obligatoria. Admite ajustes (SPEC 14). */
+export const cuerpoReemplazo = z.object(
+  {
+    ...campos,
+    tipo: z.enum(TIPOS_MOVIMIENTO_GUARDADO, { error: "TIPO_MOVIMIENTO_INVALIDO" }),
+    fecha,
+  },
+  { error: "ENTRADA_INVALIDA" },
+);
 export type CuerpoReemplazo = z.output<typeof cuerpoReemplazo>;
 
 export const idMovimiento = z.uuid({ error: "ENTRADA_INVALIDA" });

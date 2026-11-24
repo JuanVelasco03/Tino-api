@@ -28,6 +28,22 @@ const monto = z
 
 export const idCuenta = z.uuid({ error: "ENTRADA_INVALIDA" });
 
+/**
+ * Condiciones de una tarjeta (SPEC 14). Los rangos y la obligatoriedad de los
+ * días los valida `domain/tarjeta/validar.ts`. `null` en un opcional lo borra.
+ */
+const condiciones = z.object(
+  {
+    diaCorte: z.number({ error: "DIA_INVALIDO" }).optional(),
+    diaPago: z.number({ error: "DIA_INVALIDO" }).optional(),
+    tasaMensual: z.number({ error: "TASA_INVALIDA" }).nullable().optional(),
+    cuotaManejo: monto.nullable().optional(),
+    cuentaPagoId: z.uuid({ error: "CUENTA_PAGO_INVALIDA" }).nullable().optional(),
+  },
+  { error: "ENTRADA_INVALIDA" },
+);
+export type CuerpoCondiciones = z.output<typeof condiciones>;
+
 export const cuerpoAlta = z.object(
   {
     nombre,
@@ -35,6 +51,7 @@ export const cuerpoAlta = z.object(
     detalle: detalle.optional(),
     saldoInicial: monto,
     cupo: monto.optional(),
+    tarjeta: condiciones.optional(),
   },
   { error: "ENTRADA_INVALIDA" },
 );
@@ -48,6 +65,7 @@ export const cuerpoEdicion = z
       detalle: detalle.nullable().optional(),
       saldoInicial: monto.optional(),
       cupo: monto.optional(),
+      tarjeta: condiciones.optional(),
     },
     { error: "ENTRADA_INVALIDA" },
   )

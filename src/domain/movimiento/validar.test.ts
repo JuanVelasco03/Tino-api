@@ -129,6 +129,44 @@ describe("transferencia (RN-03, RN-05)", () => {
   });
 });
 
+describe("ajuste (RN-14)", () => {
+  const ajuste = (m: Partial<MovimientoEntrada> = {}): MovimientoEntrada => ({
+    ...base,
+    tipo: "ajuste",
+    ...m,
+  });
+
+  it("con una sola cuenta es válido, de origen (baja) o de destino (sube)", () => {
+    expect(validarMovimiento(ajuste({ cuentaOrigenId: "cta-efectivo" }))).toBeNull();
+    expect(validarMovimiento(ajuste({ cuentaDestinoId: "cta-efectivo" }))).toBeNull();
+  });
+
+  it("sin cuenta → ORIGEN_REQUERIDO; con las dos → DESTINO_NO_PERMITIDO", () => {
+    expect(validarMovimiento(ajuste())).toEqual({
+      codigo: "ORIGEN_REQUERIDO",
+      campo: "cuentaOrigenId",
+    });
+    expect(
+      validarMovimiento(ajuste({ cuentaOrigenId: "cta-a", cuentaDestinoId: "cta-b" })),
+    ).toEqual({ codigo: "DESTINO_NO_PERMITIDO", campo: "cuentaDestinoId" });
+  });
+
+  it("con categoría → CATEGORIA_NO_PERMITIDA; con partes → DIVISION_NO_PERMITIDA", () => {
+    expect(validarMovimiento(ajuste({ cuentaOrigenId: "cta", categoriaId: "cat" }))).toEqual({
+      codigo: "CATEGORIA_NO_PERMITIDA",
+      campo: "categoriaId",
+    });
+    const partes = [
+      { categoriaId: "a", monto: 10_000n },
+      { categoriaId: "b", monto: 20_000n },
+    ];
+    expect(validarMovimiento(ajuste({ cuentaOrigenId: "cta", partes }))).toEqual({
+      codigo: "DIVISION_NO_PERMITIDA",
+      campo: "partes",
+    });
+  });
+});
+
 describe("división en partes", () => {
   const comida = { categoriaId: "cat-comida", monto: 20_000n };
   const mercado = { categoriaId: "cat-mercado", monto: 10_000n };

@@ -30,6 +30,8 @@ const error = (codigo: CodigoErrorMovimiento, campo: string): ErrorMovimiento =>
  *
  * - Gasto: origen, sin destino. Ingreso: destino, sin origen.
  * - Transferencia (RN-03, RN-05): origen y destino distintos, sin categoría ni división.
+ * - Ajuste (RN-14, SPEC 14): una sola cuenta (destino si sube el saldo, origen
+ *   si baja), sin categoría (la reservada la pone el servicio) ni división.
  * - La categoría es opcional («sin clasificar»).
  * - División: sin categoría propia, dos o más partes con monto > 0, categorías
  *   distintas, que sumen el monto.
@@ -65,6 +67,12 @@ export function validarMovimiento(m: MovimientoEntrada): ErrorMovimiento | null 
       if (m.cuentaOrigenId === m.cuentaDestinoId) {
         return error("CUENTAS_IGUALES", "cuentaDestinoId");
       }
+      if (informado(m.categoriaId)) return error("CATEGORIA_NO_PERMITIDA", "categoriaId");
+      if (partes.length > 0) return error("DIVISION_NO_PERMITIDA", "partes");
+      return null;
+    case "ajuste":
+      if (!origen && !destino) return error("ORIGEN_REQUERIDO", "cuentaOrigenId");
+      if (origen && destino) return error("DESTINO_NO_PERMITIDO", "cuentaDestinoId");
       if (informado(m.categoriaId)) return error("CATEGORIA_NO_PERMITIDA", "categoriaId");
       if (partes.length > 0) return error("DIVISION_NO_PERMITIDA", "partes");
       return null;

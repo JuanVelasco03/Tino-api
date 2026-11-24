@@ -1,6 +1,6 @@
 # Resumen del mes
 
-> **Spec de origen:** SPEC 06 (préstamos en el patrimonio: SPEC 08; inversiones a mercado y `revaluacion`: SPEC 10) · **Necesidades:** `specs/necesidades/resumen.md`
+> **Spec de origen:** SPEC 06 (préstamos en el patrimonio: SPEC 08; inversiones a mercado y `revaluacion`: SPEC 10; ajustes fuera de ingresos y gastos: SPEC 14) · **Necesidades:** `specs/necesidades/resumen.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Cifras de un mes comparadas con el anterior: ingresos, gastos, resultado y
@@ -9,8 +9,12 @@ puente del patrimonio del mes. **Todo lo calcula la API.** El cliente muestra
 las cifras, las variaciones y los porcentajes tal como llegan, sin
 recalcularlos.
 
-**Todavía no:** ajustes de saldo, otros informes (series por categoría, rangos
-libres, exportar).
+**Ajustes de saldo** (SPEC 14): un movimiento de tipo `ajuste` no suma a
+`ingresos`, `gastos` ni `cantidadMovimientos` (RN-14). Sí mueve saldos y
+patrimonio.
+
+**Todavía no:** otros informes (series por categoría, rangos libres,
+exportar).
 
 ---
 
@@ -68,7 +72,7 @@ type ResumenDto = {
   inicio: string | null;             // día de creación de la cuenta más antigua; null sin cuentas
   tieneMovimientos: boolean;         // false → estado de día uno (todo el historial, no solo el mes)
   cuentasActivas: number;            // no archivadas, sin préstamos
-  cantidadMovimientos: number;       // del mes, de cualquier tipo (= GET /movimientos?mes=)
+  cantidadMovimientos: number;       // del mes, de cualquier tipo salvo ajustes (SPEC 14)
   ingresos: ComparacionDto;
   gastos: ComparacionDto;
   resultado: ComparacionDto;         // ingresos − gastos

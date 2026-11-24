@@ -1,6 +1,9 @@
 /**
  * Categorías sembradas, con el cliente del usuario: la política RLS
  * `categorias_select_propia` deja ver solo las propias (RN-12). Solo lectura.
+ *
+ * La categoría reservada de los ajustes (tipo `ajuste`, SPEC 14) no es una
+ * categoría que se elija: aquí no sale. La usa `MovimientosRepository`.
  */
 import { Injectable } from "@nestjs/common";
 import type { Categoria } from "../../domain/categorizacion/categoria.js";
@@ -9,6 +12,9 @@ import { ClienteSupabase } from "./cliente.js";
 import { errorInterno } from "./errores.js";
 
 const COLUMNAS = "id, nombre, tipo, posicion";
+
+/** Las que se eligen al capturar: sin la reservada de ajuste. */
+const TIPOS_ELEGIBLES = ["gasto", "ingreso"];
 
 type Fila = { id: string; nombre: string; tipo: string; posicion: number };
 
@@ -31,6 +37,7 @@ export class CategoriasRepository {
       .paraUsuario(token)
       .from("categorias")
       .select(COLUMNAS)
+      .in("tipo", TIPOS_ELEGIBLES)
       .order("tipo")
       .order("posicion");
     if (error) throw errorInterno(error);
@@ -44,6 +51,7 @@ export class CategoriasRepository {
       .from("categorias")
       .select(COLUMNAS)
       .eq("id", id)
+      .in("tipo", TIPOS_ELEGIBLES)
       .maybeSingle();
     if (error) throw errorInterno(error);
     return data === null ? null : aCategoria(data);

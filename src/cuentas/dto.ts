@@ -15,6 +15,8 @@ import type {
 import { cupoDisponible, porcentajeUsado } from "../domain/cuenta/cupo.js";
 import { naturalezaDe, type Naturaleza } from "../domain/cuenta/naturaleza.js";
 import type { Moneda } from "../domain/inversion/inversion.js";
+import type { Ref } from "../domain/movimiento/movimiento.js";
+import { tasaEfectivaAnual } from "../domain/tarjeta/tasa.js";
 import type { TrmResuelta } from "../domain/trm/trm.js";
 import { formatearValor } from "../domain/trm/valor.js";
 import { aTrmDto, type TrmDto } from "../trm/dto.js";
@@ -31,10 +33,28 @@ export type CuentaDto = {
   saldo: string;
   /** En una inversión, el efectivo inicial en su moneda. */
   saldoInicial: string;
-  tarjeta: { cupo: string; disponible: string; porcentajeUsado: number } | null;
+  tarjeta: TarjetaDto | null;
   /** Solo en una inversión, en su moneda. `tasa`: la TRM aplicada, o null en COP o sin TRM. */
   inversion: { efectivo: string; valorMercado: string; tasa: string | null } | null;
   archivadaEn: string | null;
+};
+
+/**
+ * Tarjeta de crédito: cupo (SPEC 03) y condiciones (SPEC 14). Una tarjeta sin
+ * condiciones trae los cinco campos de condiciones en null (N-79).
+ */
+export type TarjetaDto = {
+  cupo: string;
+  disponible: string;
+  porcentajeUsado: number;
+  diaCorte: number | null;
+  diaPago: number | null;
+  /** Centésimas de punto: 198 = 1,98 % M.V. */
+  tasaMensual: number | null;
+  /** Centésimas de punto, truncado: 2652 = 26,52 % E.A. */
+  tasaEfectivaAnual: number | null;
+  cuotaManejo: string | null;
+  cuentaPago: Ref | null;
 };
 
 export type GrupoCuentasDto = { total: string; cuentas: CuentaDto[] };
@@ -62,14 +82,7 @@ export function aCuentaDto(cuenta: Cuenta): CuentaDto {
     detalle: cuenta.detalle,
     saldo: cuenta.saldo.toString(),
     saldoInicial: cuenta.saldoInicial.toString(),
-    tarjeta:
-      cuenta.cupo === null
-        ? null
-        : {
-            cupo: cuenta.cupo.toString(),
-            disponible: cupoDisponible(cuenta.cupo, cuenta.saldo).toString(),
-            porcentajeUsado: porcentajeUsado(cuenta.cupo, cuenta.saldo),
-          },
+    tarjeta: cuenta.cupo === null ? null : aTarjetaDto(cuenta, cuenta.cupo),
     inversion:
       cuenta.inversion === null
         ? null
@@ -80,6 +93,22 @@ export function aCuentaDto(cuenta: Cuenta): CuentaDto {
               cuenta.inversion.trmCent === null ? null : formatearValor(cuenta.inversion.trmCent),
           },
     archivadaEn: cuenta.archivadaEn === null ? null : cuenta.archivadaEn.toISOString(),
+  };
+}
+
+function aTarjetaDto(cuenta: Cuenta, cupo: bigint): TarjetaDto {
+  const c = cuenta.condiciones ?? null;
+  return {
+    cupo: cupo.toString(),
+    disponible: cupoDisponible(cupo, cuenta.saldo).toString(),
+    porcentajeUsado: porcentajeUsado(cupo, cuenta.saldo),
+    diaCorte: c?.diaCorte ?? null,
+    diaPago: c?.diaPago ?? null,
+    tasaMensual: c?.tasaMensualCpb ?? null,
+    tasaEfectivaAnual:
+      c === null || c.tasaMensualCpb === null ? null : tasaEfectivaAnual(c.tasaMensualCpb),
+    cuotaManejo: c === null || c.cuotaManejo === null ? null : c.cuotaManejo.toString(),
+    cuentaPago: c?.cuentaPago ?? null,
   };
 }
 

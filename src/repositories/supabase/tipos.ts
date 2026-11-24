@@ -546,6 +546,8 @@ export type Database = {
         Row: {
           actualizado_en: string;
           categoria_id: string | null;
+          conciliado_destino: boolean;
+          conciliado_origen: boolean;
           creado_en: string;
           cuenta_destino_id: string | null;
           cuenta_origen_id: string | null;
@@ -563,6 +565,8 @@ export type Database = {
         Insert: {
           actualizado_en?: string;
           categoria_id?: string | null;
+          conciliado_destino?: boolean;
+          conciliado_origen?: boolean;
           creado_en?: string;
           cuenta_destino_id?: string | null;
           cuenta_origen_id?: string | null;
@@ -580,6 +584,8 @@ export type Database = {
         Update: {
           actualizado_en?: string;
           categoria_id?: string | null;
+          conciliado_destino?: boolean;
+          conciliado_origen?: boolean;
           creado_en?: string;
           cuenta_destino_id?: string | null;
           cuenta_origen_id?: string | null;
@@ -1017,6 +1023,102 @@ export type Database = {
           },
         ];
       };
+      tarjetas: {
+        Row: {
+          actualizado_en: string;
+          creado_en: string;
+          cuenta_id: string;
+          cuenta_pago_id: string | null;
+          cuota_manejo: string | null;
+          dia_corte: number;
+          dia_pago: number;
+          tasa_mensual_cpb: number | null;
+          usuario_id: string;
+        };
+        Insert: {
+          actualizado_en?: string;
+          creado_en?: string;
+          cuenta_id: string;
+          cuenta_pago_id?: string | null;
+          cuota_manejo?: string | null;
+          dia_corte: number;
+          dia_pago: number;
+          tasa_mensual_cpb?: number | null;
+          usuario_id?: string;
+        };
+        Update: {
+          actualizado_en?: string;
+          creado_en?: string;
+          cuenta_id?: string;
+          cuenta_pago_id?: string | null;
+          cuota_manejo?: string | null;
+          dia_corte?: number;
+          dia_pago?: number;
+          tasa_mensual_cpb?: number | null;
+          usuario_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tarjetas_cuenta_fkey";
+            columns: ["usuario_id", "cuenta_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+          {
+            foreignKeyName: "tarjetas_cuenta_pago_fkey";
+            columns: ["usuario_id", "cuenta_pago_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["usuario_id", "id"];
+          },
+        ];
+      };
+      tarjetas_cambios: {
+        Row: {
+          cambiado_en: string;
+          campo: string;
+          cuenta_id: string;
+          id: string;
+          usuario_id: string;
+          valor_anterior: string | null;
+          valor_nuevo: string | null;
+        };
+        Insert: {
+          cambiado_en?: string;
+          campo: string;
+          cuenta_id: string;
+          id?: string;
+          usuario_id: string;
+          valor_anterior?: string | null;
+          valor_nuevo?: string | null;
+        };
+        Update: {
+          cambiado_en?: string;
+          campo?: string;
+          cuenta_id?: string;
+          id?: string;
+          usuario_id?: string;
+          valor_anterior?: string | null;
+          valor_nuevo?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "tarjetas_cambios_cuenta_id_fkey";
+            columns: ["cuenta_id"];
+            isOneToOne: false;
+            referencedRelation: "cuentas";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tarjetas_cambios_cuenta_id_fkey";
+            columns: ["cuenta_id"];
+            isOneToOne: false;
+            referencedRelation: "prestamos_detalle";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       trm: {
         Row: {
           obtenida_en: string;
@@ -1169,6 +1271,10 @@ export type Database = {
           usos: number;
         }[];
       };
+      conciliar_movimientos: {
+        Args: { p_conciliado: boolean; p_cuenta_id: string; p_ids: string[] };
+        Returns: undefined;
+      };
       confirmar_ocurrencia: {
         Args: {
           p_monto: string;
@@ -1214,6 +1320,21 @@ export type Database = {
           p_saldo_inicial: string;
           p_tasa_mensual_cpb: number;
           p_tipo: string;
+        };
+        Returns: string;
+      };
+      crear_tarjeta: {
+        Args: {
+          p_cuenta_pago_id: string;
+          p_cuota_manejo: string;
+          p_cupo: string;
+          p_detalle: string;
+          p_dia_corte: number;
+          p_dia_pago: number;
+          p_id: string;
+          p_nombre: string;
+          p_saldo_inicial: string;
+          p_tasa_mensual_cpb: number;
         };
         Returns: string;
       };
@@ -1267,6 +1388,17 @@ export type Database = {
           p_prestamo_id: string;
         };
         Returns: undefined;
+      };
+      registrar_ajuste: {
+        Args: {
+          p_conciliar: boolean;
+          p_cuenta_id: string;
+          p_fecha: string;
+          p_id: string;
+          p_monto: string;
+          p_sube: boolean;
+        };
+        Returns: string;
       };
       registrar_aporte: {
         Args: {

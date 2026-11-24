@@ -1,6 +1,6 @@
 # SPEC 14 — Detalle de cuenta y tarjeta con ciclo
 
-> **Estado:** Aprobado
+> **Estado:** Implementado
 > **Depende de:** SPEC 03, SPEC 04, SPEC 05, SPEC 06, SPEC 08, SPEC 10, SPEC 13
 > **Fecha:** 2026-11-23
 > **Objetivo:** Que la API dé el detalle de una cuenta (historial con saldo corrido, conciliación y ajuste de saldo) y el ciclo de facturación de una tarjeta de crédito con sus condiciones.
@@ -244,7 +244,7 @@ Fechas `"YYYY-MM-DD"` en la zona del perfil. `hoy` sale de `fechaLocal`. Orden c
 
 **Tasa** (`src/domain/tarjeta/tasa.ts`):
 
-- `efectivaAnual = round(((1 + m ÷ 10000)^12 − 1) × 10000)`, en centésimas de punto, con aritmética entera en `bigint` a escala 10^12 y redondeo mitad hacia arriba. `198` → `2652`.
+- `efectivaAnual = floor(((1 + m ÷ 10000)^12 − 1) × 10000)`, en centésimas de punto, con aritmética entera en `bigint` a escala 10^12, truncado como los demás porcentajes. `198` → `2652` (26,526 %).
 
 ### Validaciones
 
@@ -574,7 +574,7 @@ Endpoints sin N-xx propia: ninguno. `GET /cuentas/:id` cubre N-02 y N-45.
 - [ ] `GET /captura` no trae «Ajuste» y trae «Cuota de manejo» entre las de gasto.
 - [ ] `GET /cuentas/:id` devuelve una cuenta archivada; con el id de un préstamo responde `404 CUENTA_NO_ENCONTRADA`.
 - [ ] `GET /cuentas/archivadas` sigue respondiendo la lista (no la toma `:id`).
-- [ ] Con los datos de Efectivo del diseño (saldo inicial 122.200, 16 movimientos del 22 oct al 11 nov, octubre conciliado) y hoy 11 nov, `GET /cuentas/:id/historial` trae `saldo: "45000"`, `conciliacion: { saldo: "148100", al: "2026-10-31", pendientes: 9 }`, `entradas: "100000"`, `salidas: "177100"` y `saldoInicioRango: "122200"`.
+- [ ] Con los datos de Efectivo del diseño (saldo inicial 122.200, 16 movimientos del 22 oct al 11 nov, octubre conciliado) y hoy 11 nov, `GET /cuentas/:id/historial` trae `saldo: "45000"`, `conciliacion: { saldo: "148100", al: "2026-10-31", pendientes: 9 }`, `entradas: "100000"`, `salidas: "177200"` y `saldoInicioRango: "122200"`.
 - [ ] Con `desde=2026-11-01` trae solo los 9 de noviembre y `saldoInicioRango: "148100"`.
 - [ ] Una transferencia de Bancolombia a Efectivo sale en el historial de Efectivo con `efecto` positivo y `contraparte` `{ nombre: "Bancolombia", sentido: "desde" }`.
 - [ ] Un gasto con fecha de mañana sale primero en el historial sin `hasta` y su `saldo` coincide con `HistorialDto.saldo`; `saldoHoy` no lo incluye.

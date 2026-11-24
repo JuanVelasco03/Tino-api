@@ -143,6 +143,7 @@ describe("/metas", () => {
         tipo: "tarjeta_credito",
         saldoInicial: "0",
         cupo: "1000000",
+        tarjeta: { diaCorte: 15, diaPago: 30 },
       });
       const r = await api(app, u).post("/inversiones", {
         nombre: "eToro",

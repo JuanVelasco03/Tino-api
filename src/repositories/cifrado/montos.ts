@@ -20,7 +20,8 @@ export type ColumnaMonto =
   | { tabla: "recurrentes"; columna: "monto" }
   | { tabla: "inversion_operaciones"; columna: "cantidad" | "monto" }
   | { tabla: "metas"; columna: "objetivo" | "avance_cumplida" }
-  | { tabla: "metas_movimientos"; columna: "monto" };
+  | { tabla: "metas_movimientos"; columna: "monto" }
+  | { tabla: "tarjetas"; columna: "cuota_manejo" };
 
 /** Dónde vive el valor. `idFila` de una parte: `<movimiento_id>:<categoria_id>`. */
 export type ContextoMonto = ColumnaMonto & { usuarioId: string; idFila: string };
@@ -82,6 +83,13 @@ export const contexto = {
     tabla: "metas_movimientos",
     columna: "monto",
     idFila: id,
+  }),
+  /** Cuota de manejo de una tarjeta (SPEC 14); la fila es la cuenta. */
+  cuotaManejo: (usuarioId: string, cuentaId: string): ContextoMonto => ({
+    usuarioId,
+    tabla: "tarjetas",
+    columna: "cuota_manejo",
+    idFila: cuentaId,
   }),
 };
 

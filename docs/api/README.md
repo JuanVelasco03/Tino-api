@@ -13,11 +13,11 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 | Módulo | Documento | Spec de origen |
 |---|---|---|
 | Perfil | [`perfil.md`](perfil.md) | SPEC 02, SPEC 04 |
-| Cuentas | [`cuentas.md`](cuentas.md) | SPEC 03, SPEC 04, SPEC 07, SPEC 08, SPEC 10, SPEC 13 |
-| Movimientos | [`movimientos.md`](movimientos.md) | SPEC 04, SPEC 07, SPEC 08, SPEC 10, SPEC 13 |
-| Captura rápida y sugerencias | [`captura.md`](captura.md) | SPEC 04, SPEC 10 |
+| Cuentas, detalle de cuenta y tarjeta | [`cuentas.md`](cuentas.md) | SPEC 03, SPEC 04, SPEC 07, SPEC 08, SPEC 10, SPEC 13, SPEC 14 |
+| Movimientos | [`movimientos.md`](movimientos.md) | SPEC 04, SPEC 07, SPEC 08, SPEC 10, SPEC 13, SPEC 14 |
+| Captura rápida y sugerencias | [`captura.md`](captura.md) | SPEC 04, SPEC 10, SPEC 14 |
 | Reglas de categorización | [`reglas.md`](reglas.md) | SPEC 04 |
-| Resumen del mes | [`resumen.md`](resumen.md) | SPEC 06, SPEC 08, SPEC 10 |
+| Resumen del mes | [`resumen.md`](resumen.md) | SPEC 06, SPEC 08, SPEC 10, SPEC 14 |
 | Recurrentes | [`recurrentes.md`](recurrentes.md) | SPEC 07, SPEC 10 |
 | Deudas y préstamos | [`prestamos.md`](prestamos.md) | SPEC 08, SPEC 10 |
 | TRM | [`trm.md`](trm.md) | SPEC 09 |
@@ -54,7 +54,8 @@ pantalla: aquí está lo que la API devuelve y acepta hoy.
 - **Porcentajes:** `number` entero (0–100). **Excepciones:** en
   [`resumen.md`](resumen.md) son enteros en décimas (`274` = 27,4 %), pueden ser
   negativos o pasar de `1000`; en [`inversiones.md`](inversiones.md) y
-  [`metas.md`](metas.md), enteros en centésimas (`1248` = 12,48 %).
+  [`metas.md`](metas.md), enteros en centésimas (`1248` = 12,48 %); las tasas de
+  la tarjeta (`cuentas.md`, SPEC 14), en centésimas de punto (`198` = 1,98 %).
 - **Moneda:** los montos van en unidades menores de su moneda: pesos en COP,
   centavos en USD. Solo una cuenta de inversión puede estar en USD (ver
   [`inversiones.md`](inversiones.md)).

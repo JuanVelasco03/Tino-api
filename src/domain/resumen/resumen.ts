@@ -4,7 +4,7 @@
  */
 import type { TipoCuentaGuardada } from "../cuenta/cuenta.js";
 import type { Activo, Moneda, Operacion, Precio } from "../inversion/inversion.js";
-import type { TipoMovimiento } from "../movimiento/movimiento.js";
+import type { TipoMovimientoGuardado } from "../movimiento/movimiento.js";
 
 export type Comparacion = {
   actual: bigint;
@@ -39,7 +39,8 @@ export type PuntoPatrimonio = { fecha: string; patrimonio: bigint };
  */
 export type MovimientoResumen = {
   id: string;
-  tipo: TipoMovimiento;
+  /** Un ajuste (SPEC 14) mueve saldos y patrimonio, pero no es ingreso ni gasto (RN-14). */
+  tipo: TipoMovimientoGuardado;
   monto: bigint;
   montoDestino: bigint | null;
   fecha: string;

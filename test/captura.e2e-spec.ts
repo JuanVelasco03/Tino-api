@@ -93,7 +93,7 @@ describe("captura, sugerencias, reglas y perfil", () => {
         u = await fabrica.crear();
       });
 
-      it("un usuario nuevo: 10 categorías de gasto y 5 de ingreso en el orden de la semilla, listas vacías", async () => {
+      it("un usuario nuevo: 11 categorías de gasto y 5 de ingreso en el orden de la semilla, sin la reservada de ajuste (SPEC 14), listas vacías", async () => {
         const c = await captura(u);
         expect(c.categorias.gasto.map((k) => k.nombre)).toEqual([
           "Comida",
@@ -106,6 +106,7 @@ describe("captura, sugerencias, reglas y perfil", () => {
           "Servicios",
           "Otros gastos",
           "Intereses",
+          "Cuota de manejo",
         ]);
         expect(c.categorias.ingreso.map((k) => k.nombre)).toEqual([
           "Salario",

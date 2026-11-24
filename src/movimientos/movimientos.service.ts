@@ -95,7 +95,8 @@ export class MovimientosService {
    * Un movimiento de préstamo se edita sin cambiar de tipo ni de préstamo, y
    * sin dejar el capital negativo (SPEC 08). Ni la inversión que tocaba ni la
    * que toca quedan con efectivo negativo (SPEC 10). La transferencia de un
-   * aporte a una meta no cambia de tipo (SPEC 13).
+   * aporte a una meta no cambia de tipo (SPEC 13). Un ajuste tampoco, y ningún
+   * movimiento pasa a ser ajuste (SPEC 14).
    */
   async reemplazar(
     usuario: UsuarioAutenticado,
@@ -118,6 +119,14 @@ export class MovimientosService {
     // La transferencia de un aporte sigue siendo transferencia (SPEC 13).
     if (esAporte && entrada.tipo !== "transferencia") {
       throw new ErrorApi("MOVIMIENTO_DE_META", "tipo");
+    }
+    // Un ajuste sigue siendo ajuste y nada se vuelve ajuste (SPEC 14). Lleva
+    // la categoría reservada: la pone la API.
+    if ((actual.tipo === "ajuste") !== (entrada.tipo === "ajuste")) {
+      throw new ErrorApi("MOVIMIENTO_DE_AJUSTE", "tipo");
+    }
+    if (entrada.tipo === "ajuste") {
+      entrada = { ...entrada, categoriaId: await this.movimientos.categoriaDeAjuste(usuario) };
     }
     const tipos = tiposDe(cuentas);
     lanzar(

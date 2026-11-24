@@ -15,6 +15,9 @@
  * Inversiones (SPEC 10): `monto_destino` se cifra con su propia AAD
  * (`movimientos|monto_destino|<id>`) y la tasa implícita llega calculada por
  * el dominio. La moneda la fija la función de Postgres desde las cuentas.
+ *
+ * Detalle de cuenta (SPEC 14): `listarDeCuenta` agrega el estado de
+ * conciliación por lado, que la vista no trae; se lee de `movimientos`.
  */
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
@@ -23,12 +26,13 @@ import type { UsuarioAutenticado } from "../../autenticacion/usuario.js";
 import { ErrorApi } from "../../comun/error-api.js";
 import { esMoneda, type Moneda } from "../../domain/inversion/inversion.js";
 import {
-  TIPOS_MOVIMIENTO,
+  TIPOS_MOVIMIENTO_GUARDADO,
   type Movimiento,
   type MovimientoEntrada,
   type Ref,
-  type TipoMovimiento,
+  type TipoMovimientoGuardado,
 } from "../../domain/movimiento/movimiento.js";
+import type { MovimientoConciliable } from "../../domain/cuenta/historial.js";
 import { TASA_UNITARIA } from "../../domain/movimiento/tasa.js";
 import type { MovimientoConId } from "../../domain/prestamo/validar.js";
 import { CifradorMontos, contexto } from "../cifrado/montos.js";
@@ -81,8 +85,8 @@ function requerido<T>(valor: T | null, columna: string): T {
   return valor;
 }
 
-function aTipo(valor: string | null): TipoMovimiento {
-  const tipo = TIPOS_MOVIMIENTO.find((t) => t === valor);
+function aTipo(valor: string | null): TipoMovimientoGuardado {
+  const tipo = TIPOS_MOVIMIENTO_GUARDADO.find((t) => t === valor);
   if (!tipo) throw new Error(`Tipo de movimiento desconocido: ${valor}`);
   return tipo;
 }
@@ -269,6 +273,36 @@ export class MovimientosRepository {
     return (data as unknown as FilaDetalle[]).map((f) => this.aMovimiento(usuario.id, f));
   }
 
+  /**
+   * Todos los movimientos que tocan la cuenta, con su estado de conciliación
+   * por lado (SPEC 14). Sin orden: lo pone el dominio.
+   */
+  async listarDeCuenta(
+    usuario: UsuarioAutenticado,
+    cuentaId: string,
+  ): Promise<MovimientoConciliable[]> {
+    const filtro = `cuenta_origen_id.eq.${cuentaId},cuenta_destino_id.eq.${cuentaId}`;
+    const [detalle, estados] = await Promise.all([
+      this.cliente(usuario.token).from("movimientos_detalle").select(COLUMNAS).or(filtro),
+      this.cliente(usuario.token)
+        .from("movimientos")
+        .select("id, conciliado_origen, conciliado_destino")
+        .or(filtro),
+    ]);
+    if (detalle.error) throw traducir(detalle.error);
+    if (estados.error) throw traducir(estados.error);
+    const porId = new Map(estados.data.map((e) => [e.id, e]));
+    return (detalle.data as unknown as FilaDetalle[]).map((f) => {
+      const m = this.aMovimiento(usuario.id, f);
+      const estado = porId.get(m.id);
+      return {
+        ...m,
+        conciliadoOrigen: estado?.conciliado_origen ?? false,
+        conciliadoDestino: estado?.conciliado_destino ?? false,
+      };
+    });
+  }
+
   /** `null` si no existe o no es visible por RLS (movimiento ajeno). */
   async obtener(usuario: UsuarioAutenticado, id: string): Promise<Movimiento | null> {
     const { data, error } = await this.cliente(usuario.token)
@@ -351,6 +385,18 @@ export class MovimientosRepository {
       .maybeSingle();
     if (error) throw traducir(error);
     return data !== null;
+  }
+
+  /** Id de la categoría reservada de los ajustes de saldo (RN-14, SPEC 14). */
+  async categoriaDeAjuste(usuario: UsuarioAutenticado): Promise<string> {
+    const { data, error } = await this.cliente(usuario.token)
+      .from("categorias")
+      .select("id")
+      .eq("tipo", "ajuste")
+      .maybeSingle();
+    if (error) throw traducir(error);
+    if (data === null) throw new Error("El usuario no tiene la categoría reservada de ajuste.");
+    return data.id;
   }
 
   /** Si el movimiento es la transferencia de un aporte a una meta (SPEC 13). */

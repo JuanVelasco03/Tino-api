@@ -28,7 +28,7 @@ type CategoriaDto = { id: string; nombre: string; tipo: "gasto" | "ingreso" };
 type CapturaDto = {
   fechaHoy: string;                        // "YYYY-MM-DD" en la zona del usuario: el defecto de la fecha
   cuentaPredeterminadaId: string | null;   // la elegida si está activa; si no, la primera activa; null sin cuentas
-  categorias: { gasto: CategoriaDto[]; ingreso: CategoriaDto[] }; // en el orden en que se muestran
+  categorias: { gasto: CategoriaDto[]; ingreso: CategoriaDto[] }; // en el orden en que se muestran; sin la reservada «Ajuste» (SPEC 14)
   gastosHoy: string;                       // suma de los gastos de hoy (sin ingresos ni transferencias)
   conceptosFrecuentes: {                   // hasta 6 por tipo, últimos 90 días, el más usado primero
     gasto: string[];

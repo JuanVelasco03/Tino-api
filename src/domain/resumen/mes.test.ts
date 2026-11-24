@@ -95,6 +95,18 @@ describe("resumirMes", () => {
     expect(r.cantidadMovimientos).toBe(2);
   });
 
+  it("los ajustes de saldo no suman a ingresos, gastos ni cantidad (RN-14)", () => {
+    const movimientos = [
+      mov({ tipo: "gasto", monto: 10_000n, fecha: "2026-11-02" }),
+      mov({ tipo: "ajuste", monto: 3_500n, fecha: "2026-11-03", cuentaDestinoId: null }),
+      mov({ tipo: "ajuste", monto: 1_000n, fecha: "2026-11-04", cuentaOrigenId: null }),
+    ];
+    const r = resumirMes(movimientos, [], categorias, "2026-11");
+    expect(r.ingresos.actual).toBe(0n);
+    expect(r.gastos.actual).toBe(10_000n);
+    expect(r.cantidadMovimientos).toBe(1);
+  });
+
   it("el gasto dividido se reparte entre sus partes", () => {
     const { movimientos, partes } = escenario();
     const r = resumirMes(movimientos, partes, categorias, "2026-11");

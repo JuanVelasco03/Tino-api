@@ -52,6 +52,8 @@ function cifrasDe(
   };
   for (const m of movimientos) {
     if (m.fecha < desde || m.fecha > hasta) continue;
+    // RN-14: un ajuste no se mezcla con ingresos, gastos ni la cantidad del mes.
+    if (m.tipo === "ajuste") continue;
     cifras.cantidad++;
     if (m.tipo === "ingreso") cifras.ingresos += m.monto;
     if (m.tipo !== "gasto") continue;

@@ -1,6 +1,6 @@
 # Movimientos
 
-> **Spec de origen:** SPEC 04 (confirmados de recurrentes: SPEC 07; movimientos de préstamo: SPEC 08; fondeo de inversiones, `montoDestino` y tasa implícita: SPEC 10; aportes a metas: SPEC 13) · **Necesidades:** `specs/necesidades/captura-rapida.md`
+> **Spec de origen:** SPEC 04 (confirmados de recurrentes: SPEC 07; movimientos de préstamo: SPEC 08; fondeo de inversiones, `montoDestino` y tasa implícita: SPEC 10; aportes a metas: SPEC 13; ajustes de saldo y conciliación: SPEC 14) · **Necesidades:** `specs/necesidades/captura-rapida.md`
 > · Convenciones comunes (auth, montos, errores) en [`README.md`](README.md).
 
 Gastos, ingresos y transferencias: registrar, listar por mes, editar y
@@ -10,7 +10,31 @@ en la base (RN-13), sin endpoint de lectura por ahora.
 
 **Hoy:** gastos e ingresos solo en COP. Una transferencia puede ir entre una
 cuenta COP y una inversión USD (SPEC 10), con dos montos. **Todavía no:**
-gastos o ingresos en USD, persona asociada en la captura ni ajustes de saldo.
+gastos o ingresos en USD ni persona asociada en la captura.
+
+### Ajustes de saldo (SPEC 14)
+
+Un ajuste es un movimiento de tipo `ajuste` (RN-14) con una sola cuenta,
+efectivo o banco: `cuentaDestino` si subió el saldo, `cuentaOrigen` si bajó.
+Lleva la categoría reservada «Ajuste», que no sale en `GET /captura`.
+
+- Nace solo en [`POST /cuentas/:id/ajustes`](cuentas.md#post-cuentasidajustes).
+  `POST /movimientos` con `tipo: "ajuste"` responde `TIPO_MOVIMIENTO_INVALIDO`.
+- Sale en la lista. Se muestra con `+` si trae `cuentaDestino` y `−` si trae
+  `cuentaOrigen`.
+- `PUT` lo edita sin cambiar de tipo: monto, fecha, nota, descripción y la
+  cuenta (otra efectivo o banco; la dirección la da el campo). Sin
+  `categoriaId` ni `partes`: la API pone la reservada. Ningún movimiento pasa
+  a ser ajuste (`MOVIMIENTO_DE_AJUSTE`). `DELETE` lo borra, con historial.
+- No cuenta como ingreso ni gasto en el resumen.
+
+### Conciliación (SPEC 14)
+
+Cada movimiento tiene un estado de conciliación **por cuenta**, que se lee y se
+cambia en [`/cuentas/:id/historial`](cuentas.md#get-cuentasidhistorial) y
+[`/cuentas/:id/conciliacion`](cuentas.md#put-cuentasidconciliacion). Un `PUT`
+que cambia el monto, la fecha o el tipo lo devuelve a pendiente en sus dos
+lados; uno que cambia una cuenta, solo en ese lado.
 
 ### Fondeo y retiro de inversiones (SPEC 10)
 
@@ -80,7 +104,7 @@ existe o es de otro usuario, `404 MOVIMIENTO_NO_ENCONTRADO`.
 ## Tipos
 
 ```ts
-type TipoMovimiento = "gasto" | "ingreso" | "transferencia";
+type TipoMovimiento = "gasto" | "ingreso" | "transferencia" | "ajuste"; // "ajuste" solo en lecturas y PUT (SPEC 14)
 type Ref = { id: string; nombre: string };
 
 type MovimientoDto = {
@@ -109,6 +133,7 @@ type MovimientoDto = {
 | `gasto` | obligatoria | no | opcional: una categoría de gasto, o partes |
 | `ingreso` | no | obligatoria | opcional: una categoría de ingreso, o partes |
 | `transferencia` | obligatoria | obligatoria, distinta | ninguna (RN-05) |
+| `ajuste` | una de las dos | una de las dos | la reservada «Ajuste», la pone la API (RN-14) |
 
 Pagar la tarjeta es una **transferencia** hacia la tarjeta (RN-07), no un gasto.
 
@@ -253,6 +278,8 @@ Errores: los del `POST`, más:
 | 409 | `CUENTA_ARCHIVADA` | — | Alguna cuenta **actual** del movimiento está archivada: no se modifica. |
 | 422 | `MOVIMIENTO_DE_PRESTAMO` | `tipo` | Movimiento de préstamo que cambia de tipo o de préstamo, o interés que cambia de tipo. |
 | 422 | `MOVIMIENTO_DE_META` | `tipo` | Transferencia de un aporte a una meta que cambia de tipo. |
+| 422 | `MOVIMIENTO_DE_AJUSTE` | `tipo` | Un ajuste que cambia de tipo, u otro movimiento que pasa a ajuste. |
+| 422 | `TIPO_NO_ADMITIDO` | — | Un ajuste hacia una cuenta que no es efectivo ni banco. |
 | 422 | `CUENTA_DE_PRESTAMO` | `cuentaOrigenId` o `cuentaDestinoId` | La cuenta nueva es un préstamo. |
 | 422 | `CAPITAL_NEGATIVO` | — | El cambio deja un préstamo con capital negativo. |
 | 422 | `EFECTIVO_INSUFICIENTE` | — | El cambio deja el efectivo de una inversión, la de antes o la nueva, negativo algún día. |

@@ -153,6 +153,7 @@ describe("/cuentas", () => {
           tipo: "tarjeta_credito",
           saldoInicial: "1284300",
           cupo: "4000000",
+          tarjeta: { diaCorte: 15, diaPago: 30 },
         });
 
         expect(nequi).toEqual({
@@ -347,6 +348,7 @@ describe("/cuentas", () => {
           tipo: "tarjeta_credito",
           saldoInicial: "0",
           cupo: "1000",
+          tarjeta: { diaCorte: 15, diaPago: 30 },
         });
       });
 

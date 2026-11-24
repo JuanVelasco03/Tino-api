@@ -12,7 +12,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { UsuarioAutenticado } from "../../autenticacion/usuario.js";
 import { TIPOS_GUARDADOS, type TipoCuentaGuardada } from "../../domain/cuenta/cuenta.js";
 import { esMoneda, type Moneda } from "../../domain/inversion/inversion.js";
-import { TIPOS_MOVIMIENTO, type TipoMovimiento } from "../../domain/movimiento/movimiento.js";
+import {
+  TIPOS_MOVIMIENTO_GUARDADO,
+  type TipoMovimientoGuardado,
+} from "../../domain/movimiento/movimiento.js";
 import type { MovimientoResumen, ParteResumen } from "../../domain/resumen/resumen.js";
 import { CifradorMontos, contexto } from "../cifrado/montos.js";
 import { ClienteSupabase } from "./cliente.js";
@@ -83,8 +86,8 @@ function aMoneda(valor: string): Moneda {
   return valor;
 }
 
-function aTipoMovimiento(valor: string): TipoMovimiento {
-  const tipo = TIPOS_MOVIMIENTO.find((t) => t === valor);
+function aTipoMovimiento(valor: string): TipoMovimientoGuardado {
+  const tipo = TIPOS_MOVIMIENTO_GUARDADO.find((t) => t === valor);
   if (!tipo) throw new Error(`Tipo de movimiento desconocido: ${valor}`);
   return tipo;
 }

@@ -85,6 +85,7 @@ describe.skipIf(!configurado)("montos cifrados en la base (SPEC 05)", () => {
       tipo: "tarjeta_credito",
       saldoInicial: "1284300",
       cupo: "4000000",
+      tarjeta: { diaCorte: 15, diaPago: 30 },
     });
     const captura = (await api(app, u).get("/captura").expect(200)).body as CapturaDto;
     comida = captura.categorias.gasto.find((c) => c.nombre === "Comida")!.id;

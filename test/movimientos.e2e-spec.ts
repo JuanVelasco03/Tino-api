@@ -114,6 +114,7 @@ describe("/movimientos", () => {
           tipo: "tarjeta_credito",
           saldoInicial: "1284300",
           cupo: "4000000",
+          tarjeta: { diaCorte: 15, diaPago: 30 },
         });
         cats = await categorias(u);
       });

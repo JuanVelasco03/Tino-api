@@ -1,4 +1,6 @@
 import { TIPO_INVERSION, type Moneda } from "../inversion/inversion.js";
+import type { Ref } from "../movimiento/movimiento.js";
+import type { CondicionesTarjeta } from "../tarjeta/tarjeta.js";
 import { TIPOS_PRESTAMO, type TipoPrestamo } from "../prestamo/prestamo.js";
 import type { TipoCuenta } from "./naturaleza.js";
 
@@ -64,7 +66,15 @@ export type Cuenta = {
   archivadaEn: Date | null;
   /** Solo en una inversión. */
   inversion: DetalleInversion | null;
+  /**
+   * Condiciones de una tarjeta (SPEC 14), con el nombre de la cuenta de pago.
+   * `null` o ausente: no es tarjeta, o es una tarjeta sin condiciones (N-79).
+   */
+  condiciones?: CondicionesConPago | null;
 };
+
+/** Condiciones de una tarjeta con su cuenta de pago resuelta (SPEC 14). */
+export type CondicionesConPago = CondicionesTarjeta & { cuentaPago: Ref | null };
 
 /** Cuenta tal como se guarda: sin saldo, que se calcula con `conSaldos` (RN-01). */
 export type CuentaGuardada = Omit<Cuenta, "saldo" | "inversion">;
@@ -84,3 +94,10 @@ export type ResumenCuentas = {
   /** activos.total − pasivos.total + prestamos.teDeben − prestamos.debes; puede ser negativo. */
   patrimonioNeto: bigint;
 };
+
+/** Tipos con historial, conciliación y ajuste de saldo (SPEC 14). */
+export const TIPOS_CON_DETALLE = ["efectivo", "banco"] as const satisfies readonly TipoCuenta[];
+
+export function tieneDetalle(tipo: string): boolean {
+  return (TIPOS_CON_DETALLE as readonly string[]).includes(tipo);
+}

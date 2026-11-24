@@ -14,6 +14,10 @@
  *
  * Inversiones (SPEC 10): sí son cuentas visibles, con su `moneda`. Nacen en
  * `crear_inversion` (`InversionesRepository`), no aquí.
+ *
+ * Tarjetas (SPEC 14): las condiciones viven en `tarjetas`. Toda lectura de
+ * cuentas las adjunta (`condiciones`). Una tarjeta nace con `crear_tarjeta`,
+ * que inserta la cuenta y sus condiciones en una transacción.
  */
 import { randomUUID } from "node:crypto";
 import { Injectable } from "@nestjs/common";
@@ -27,7 +31,10 @@ import {
   type TipoCuentaVisible,
 } from "../../domain/cuenta/cuenta.js";
 import type { Naturaleza } from "../../domain/cuenta/naturaleza.js";
+import type { CondicionesConPago } from "../../domain/cuenta/cuenta.js";
 import type { EfectoMovimiento } from "../../domain/cuenta/saldo.js";
+import type { CondicionesTarjeta } from "../../domain/tarjeta/tarjeta.js";
+import type { CondicionesEntrada } from "../../domain/tarjeta/validar.js";
 import { esMoneda, type Moneda } from "../../domain/inversion/inversion.js";
 import {
   TIPOS_PRESTAMO,
@@ -67,6 +74,21 @@ export type DatosAlta = {
   cupo: bigint | null;
 };
 
+type FilaTarjeta = {
+  cuenta_id: string;
+  dia_corte: number;
+  dia_pago: number;
+  tasa_mensual_cpb: number | null;
+  cuota_manejo: string | null;
+  cuenta_pago_id: string | null;
+};
+
+const COLUMNAS_TARJETA =
+  "cuenta_id, dia_corte, dia_pago, tasa_mensual_cpb, cuota_manejo, cuenta_pago_id";
+
+/** Condiciones completas del alta de una tarjeta (SPEC 14). */
+export type DatosCondiciones = CondicionesTarjeta;
+
 export type DatosEdicion = {
   nombre?: string;
   tipo?: TipoCuentaEnAlcance;
@@ -90,6 +112,10 @@ function aMoneda(valor: string): Moneda {
 function traducir(error: PostgrestError): Error {
   if (error.code === "23505" && error.message.includes("cuentas_nombre_unico")) {
     return new ErrorApi("NOMBRE_DUPLICADO");
+  }
+  // Cuenta de pago inexistente o ajena (SPEC 14).
+  if (error.code === "23503" && error.message.includes("tarjetas_cuenta_pago_fkey")) {
+    return new ErrorApi("CUENTA_PAGO_INVALIDA");
   }
   // CAMBIO_DE_NATURALEZA, ORDEN_INVALIDO, TIPO_DE_INVERSION_FIJO, MONEDA_FIJA…
   const deFuncion = desdeFuncion(error);
@@ -139,7 +165,10 @@ export class CuentasRepository {
       .order("posicion")
       .order("creado_en");
     if (error) throw traducir(error);
-    return (data as Fila[]).map((f) => this.aCuenta(usuario.id, f));
+    return this.conCondiciones(
+      usuario,
+      (data as Fila[]).map((f) => this.aCuenta(usuario.id, f)),
+    );
   }
 
   /** Archivadas, la más reciente primero. */
@@ -151,7 +180,10 @@ export class CuentasRepository {
       .not("archivada_en", "is", null)
       .order("archivada_en", { ascending: false });
     if (error) throw traducir(error);
-    return (data as Fila[]).map((f) => this.aCuenta(usuario.id, f));
+    return this.conCondiciones(
+      usuario,
+      (data as Fila[]).map((f) => this.aCuenta(usuario.id, f)),
+    );
   }
 
   /** `null` si no existe, no es visible por RLS (cuenta ajena) o es un préstamo. */
@@ -163,7 +195,68 @@ export class CuentasRepository {
       .not("tipo", "in", TIPOS_DE_PRESTAMO)
       .maybeSingle();
     if (error) throw traducir(error);
-    return data === null ? null : this.aCuenta(usuario.id, data as Fila);
+    if (data === null) return null;
+    const [cuenta] = await this.conCondiciones(usuario, [this.aCuenta(usuario.id, data as Fila)]);
+    return cuenta ?? null;
+  }
+
+  /**
+   * Adjunta a cada tarjeta sus condiciones y el nombre de su cuenta de pago.
+   * Una tarjeta sin fila en `tarjetas` queda con `condiciones: null` (N-79).
+   */
+  private async conCondiciones(
+    usuario: UsuarioAutenticado,
+    cuentas: CuentaGuardada[],
+  ): Promise<CuentaGuardada[]> {
+    const ids = cuentas.filter((c) => c.tipo === "tarjeta_credito").map((c) => c.id);
+    if (ids.length === 0) return cuentas;
+    const { data, error } = await this.cliente(usuario.token)
+      .from("tarjetas")
+      .select(COLUMNAS_TARJETA)
+      .in("cuenta_id", ids);
+    if (error) throw traducir(error);
+    const filas = data as FilaTarjeta[];
+    const pagos = [...new Set(filas.flatMap((f) => (f.cuenta_pago_id ? [f.cuenta_pago_id] : [])))];
+    const nombres = new Map<string, string>();
+    if (pagos.length > 0) {
+      const leidas = await this.cliente(usuario.token)
+        .from("cuentas")
+        .select("id, nombre")
+        .in("id", pagos);
+      if (leidas.error) throw traducir(leidas.error);
+      for (const c of leidas.data) nombres.set(c.id, c.nombre);
+    }
+    const porCuenta = new Map(filas.map((f) => [f.cuenta_id, f]));
+    return cuentas.map((c) => {
+      if (c.tipo !== "tarjeta_credito") return c;
+      const fila = porCuenta.get(c.id);
+      return { ...c, condiciones: fila ? this.aCondiciones(usuario.id, fila, nombres) : null };
+    });
+  }
+
+  private aCondiciones(
+    usuarioId: string,
+    fila: FilaTarjeta,
+    nombres: ReadonlyMap<string, string>,
+  ): CondicionesConPago {
+    const nombrePago = fila.cuenta_pago_id === null ? undefined : nombres.get(fila.cuenta_pago_id);
+    return {
+      diaCorte: fila.dia_corte,
+      diaPago: fila.dia_pago,
+      tasaMensualCpb: fila.tasa_mensual_cpb,
+      cuotaManejo:
+        fila.cuota_manejo === null
+          ? null
+          : this.cifrador.descifrar(
+              fila.cuota_manejo,
+              contexto.cuotaManejo(usuarioId, fila.cuenta_id),
+            ),
+      cuentaPagoId: fila.cuenta_pago_id,
+      cuentaPago:
+        fila.cuenta_pago_id === null || nombrePago === undefined
+          ? null
+          : { id: fila.cuenta_pago_id, nombre: nombrePago },
+    };
   }
 
   /**
@@ -255,6 +348,90 @@ export class CuentasRepository {
       .insert(fila as unknown as TablesInsert<"cuentas">);
     if (error) throw traducir(error);
     return this.obtenerExistente(usuario, id);
+  }
+
+  /** Tarjeta con sus condiciones, en una transacción (`crear_tarjeta`, SPEC 14). */
+  async crearTarjeta(
+    usuario: UsuarioAutenticado,
+    datos: DatosAlta,
+    condiciones: DatosCondiciones,
+  ): Promise<CuentaGuardada> {
+    if (datos.cupo === null) throw new Error("Una tarjeta llega con el cupo validado.");
+    const id = randomUUID();
+    const args = {
+      p_id: id,
+      p_nombre: datos.nombre,
+      p_detalle: datos.detalle,
+      p_saldo_inicial: this.cifrador.cifrar(
+        datos.saldoInicial,
+        contexto.cuenta(usuario.id, id, "saldo_inicial"),
+      ),
+      p_cupo: this.cifrador.cifrar(datos.cupo, contexto.cuenta(usuario.id, id, "cupo")),
+      p_dia_corte: condiciones.diaCorte,
+      p_dia_pago: condiciones.diaPago,
+      p_tasa_mensual_cpb: condiciones.tasaMensualCpb,
+      p_cuota_manejo:
+        condiciones.cuotaManejo === null
+          ? null
+          : this.cifrador.cifrar(condiciones.cuotaManejo, contexto.cuotaManejo(usuario.id, id)),
+      p_cuenta_pago_id: condiciones.cuentaPagoId,
+    };
+    const { error } = await this.cliente(usuario.token).rpc(
+      "crear_tarjeta",
+      args as unknown as Database["public"]["Functions"]["crear_tarjeta"]["Args"],
+    );
+    if (error) throw traducir(error);
+    return this.obtenerExistente(usuario, id);
+  }
+
+  /** Si la tarjeta ya tiene fila en `tarjetas`. */
+  async tieneCondiciones(usuario: UsuarioAutenticado, cuentaId: string): Promise<boolean> {
+    const { data, error } = await this.cliente(usuario.token)
+      .from("tarjetas")
+      .select("cuenta_id")
+      .eq("cuenta_id", cuentaId)
+      .maybeSingle();
+    if (error) throw traducir(error);
+    return data !== null;
+  }
+
+  /**
+   * Escribe las condiciones de una tarjeta: inserta la fila si no existe (con
+   * los días ya validados) o cambia solo los campos enviados. Una cuota igual a
+   * la guardada conserva su cifrado: el historial no registra cambios falsos.
+   */
+  async guardarCondiciones(
+    usuario: UsuarioAutenticado,
+    cuentaId: string,
+    cambios: CondicionesEntrada,
+  ): Promise<void> {
+    const lectura = await this.cliente(usuario.token)
+      .from("tarjetas")
+      .select(COLUMNAS_TARJETA)
+      .eq("cuenta_id", cuentaId)
+      .maybeSingle();
+    if (lectura.error) throw traducir(lectura.error);
+    const guardada = lectura.data as FilaTarjeta | null;
+    const ctx = contexto.cuotaManejo(usuario.id, cuentaId);
+    const cuota =
+      cambios.cuotaManejo === undefined
+        ? undefined
+        : cambios.cuotaManejo === null
+          ? null
+          : this.cifrador.cifrarSiCambia(cambios.cuotaManejo, guardada?.cuota_manejo ?? null, ctx);
+    const fila: Partial<FilaTarjeta> = {
+      ...(cambios.diaCorte === undefined ? {} : { dia_corte: cambios.diaCorte }),
+      ...(cambios.diaPago === undefined ? {} : { dia_pago: cambios.diaPago }),
+      ...(cambios.tasaMensual === undefined ? {} : { tasa_mensual_cpb: cambios.tasaMensual }),
+      ...(cuota === undefined ? {} : { cuota_manejo: cuota }),
+      ...(cambios.cuentaPagoId === undefined ? {} : { cuenta_pago_id: cambios.cuentaPagoId }),
+    };
+    const tabla = this.cliente(usuario.token).from("tarjetas");
+    const { error } =
+      guardada === null
+        ? await tabla.insert({ ...fila, cuenta_id: cuentaId } as TablesInsert<"tarjetas">)
+        : await tabla.update(fila as TablesUpdate<"tarjetas">).eq("cuenta_id", cuentaId);
+    if (error) throw traducir(error);
   }
 
   private async actualizarFila(

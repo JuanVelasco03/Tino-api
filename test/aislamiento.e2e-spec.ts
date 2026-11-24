@@ -35,6 +35,11 @@
  * SPEC 13: `metas`, `metas_movimientos` y `metas_cambios`: nadie ve, cambia ni
  * borra lo ajeno; `crear_meta` y `registrar_aporte` atacadas con datos
  * ajenos; los montos solo cifrados; el historial solo lo escriben triggers.
+ *
+ * SPEC 14: `tarjetas` y `tarjetas_cambios`: nadie ve ni cambia lo ajeno;
+ * `crear_tarjeta` con cuenta de pago ajena; `conciliar_movimientos` y
+ * `registrar_ajuste` (security definer) atacadas con cuentas y movimientos
+ * ajenos; la cuota solo cifrada; el historial solo lo escriben triggers.
  */
 import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
@@ -395,10 +400,10 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
       datosB = await preparar(b, "Mov B", "Almuerzo B");
     });
 
-    it("el usuario nuevo tiene sus 15 categorías y sus reglas sembradas", async () => {
+    it("el usuario nuevo tiene sus 17 categorías (con «Ajuste», SPEC 14) y sus reglas sembradas", async () => {
       for (const u of [a, b]) {
         const { data: categorias } = await u.cliente.from("categorias").select("usuario_id");
-        expect(categorias).toHaveLength(15);
+        expect(categorias).toHaveLength(17);
         expect(categorias!.every((c) => c.usuario_id === u.id)).toBe(true);
 
         const { data: reglas } = await u.cliente.from("reglas_categoria").select("usuario_id");
@@ -1835,6 +1840,212 @@ describe.skipIf(!configurado)("aislamiento entre usuarios (RLS)", () => {
         .from("metas_cambios")
         .delete()
         .eq("meta_id", datosA.meta)
+        .select("id");
+      expect(data).toEqual([]);
+    });
+  });
+
+  describe("detalle de cuenta y tarjetas (SPEC 14)", () => {
+    type Datos = { banco: string; tarjeta: string; movimiento: string };
+    let datosA: Datos;
+    let datosB: Datos;
+    const hoy = new Date().toISOString().slice(0, 10);
+
+    function argumentosTarjeta(u: Usuario, cuentaPago: string | null) {
+      const id = randomUUID();
+      return {
+        p_id: id,
+        p_nombre: `Visa ${id.slice(0, 6)}`,
+        p_detalle: null,
+        p_saldo_inicial: cifrador().cifrar(0n, contexto.cuenta(u.id, id, "saldo_inicial")),
+        p_cupo: cifrador().cifrar(1000000n, contexto.cuenta(u.id, id, "cupo")),
+        p_dia_corte: 15,
+        p_dia_pago: 30,
+        p_tasa_mensual_cpb: 198,
+        p_cuota_manejo: cifrador().cifrar(26990n, contexto.cuotaManejo(u.id, id)),
+        p_cuenta_pago_id: cuentaPago,
+      };
+    }
+
+    async function preparar(u: Usuario, nombre: string): Promise<Datos> {
+      const banco = randomUUID();
+      const { error: errorBanco } = await u.cliente.from("cuentas").insert({
+        id: banco,
+        nombre,
+        tipo: "banco",
+        saldo_inicial: cifrador().cifrar(500000n, contexto.cuenta(u.id, banco, "saldo_inicial")),
+      });
+      if (errorBanco) throw new Error(`No se pudo crear el banco: ${errorBanco.message}`);
+
+      const argumentos = argumentosTarjeta(u, banco);
+      const { error: errorTarjeta } = await u.cliente.rpc("crear_tarjeta", argumentos);
+      if (errorTarjeta) throw new Error(`No se pudo crear la tarjeta: ${errorTarjeta.message}`);
+
+      // Un cambio de día de corte para que haya fila en tarjetas_cambios.
+      const { error: errorCambio } = await u.cliente
+        .from("tarjetas")
+        .update({ dia_corte: 20 })
+        .eq("cuenta_id", argumentos.p_id);
+      if (errorCambio) throw new Error(`No se pudo cambiar el corte: ${errorCambio.message}`);
+
+      const movimiento = randomUUID();
+      const { error: errorMov } = await u.cliente.rpc("registrar_movimiento", {
+        p_id: movimiento,
+        p_tipo: "gasto",
+        p_monto: cifrador().cifrar(10000n, contexto.movimiento(u.id, movimiento)),
+        p_fecha: hoy,
+        p_descripcion: "Almuerzo",
+        p_nota: null,
+        p_cuenta_origen_id: banco,
+        p_cuenta_destino_id: null,
+        p_categoria_id: null,
+        p_partes: null,
+      });
+      if (errorMov) throw new Error(`No se pudo registrar el gasto: ${errorMov.message}`);
+
+      return { banco, tarjeta: argumentos.p_id, movimiento };
+    }
+
+    beforeAll(async () => {
+      datosA = await preparar(a, "Detalle A");
+      datosB = await preparar(b, "Detalle B");
+    });
+
+    it("nadie ve tarjetas ni su historial ajenos", async () => {
+      for (const [u, otro, propio] of [
+        [a, b, datosA],
+        [b, a, datosB],
+      ] as const) {
+        const { data: tarjetas, error } = await u.cliente
+          .from("tarjetas")
+          .select("cuenta_id, usuario_id");
+        expect(error).toBeNull();
+        expect(tarjetas).toEqual([{ cuenta_id: propio.tarjeta, usuario_id: u.id }]);
+
+        const { data: cambios, error: errorCambios } = await u.cliente
+          .from("tarjetas_cambios")
+          .select("usuario_id, cuenta_id");
+        expect(errorCambios).toBeNull();
+        expect(cambios!.length).toBeGreaterThan(0);
+        expect(cambios!.every((c) => c.usuario_id === u.id && c.cuenta_id === propio.tarjeta)).toBe(
+          true,
+        );
+        expect(cambios!.some((c) => c.usuario_id === otro.id)).toBe(false);
+      }
+    });
+
+    it("la cuota de manejo solo se guarda cifrada", async () => {
+      const { data } = await admin
+        .from("tarjetas")
+        .select("cuota_manejo")
+        .eq("cuenta_id", datosA.tarjeta)
+        .single();
+      expect(data!.cuota_manejo).toMatch(/^v1\./);
+      const { error } = await admin
+        .from("tarjetas")
+        .update({ cuota_manejo: "26990" })
+        .eq("cuenta_id", datosA.tarjeta);
+      expect(error?.code).toBe("23514");
+      expect(error?.message).toContain("tarjetas_cuota_manejo_cifrado");
+    });
+
+    it("crear_tarjeta con cuenta de pago ajena falla por la FK y no deja nada", async () => {
+      const argumentos = argumentosTarjeta(a, datosB.banco);
+      const { error } = await a.cliente.rpc("crear_tarjeta", argumentos);
+      expect(error?.code).toBe("23503");
+      expect(error?.message).toContain("tarjetas_cuenta_pago_fkey");
+      const { data } = await admin.from("cuentas").select("id").eq("id", argumentos.p_id);
+      expect(data).toEqual([]);
+    });
+
+    it("INSERT, UPDATE y DELETE directos sobre tarjetas ajenas no pasan", async () => {
+      const { error } = await a.cliente.from("tarjetas").insert({
+        cuenta_id: datosB.tarjeta,
+        usuario_id: b.id,
+        dia_corte: 1,
+        dia_pago: 10,
+      });
+      expect(error?.code).toBe("42501");
+
+      const { data: cambiada, error: errorUpdate } = await a.cliente
+        .from("tarjetas")
+        .update({ dia_corte: 1 })
+        .eq("cuenta_id", datosB.tarjeta)
+        .select("cuenta_id");
+      expect(errorUpdate).toBeNull();
+      expect(cambiada).toEqual([]);
+
+      const { data: borrada } = await a.cliente
+        .from("tarjetas")
+        .delete()
+        .eq("cuenta_id", datosB.tarjeta)
+        .select("cuenta_id");
+      expect(borrada).toEqual([]);
+
+      const { data: real } = await admin
+        .from("tarjetas")
+        .select("dia_corte")
+        .eq("cuenta_id", datosB.tarjeta)
+        .single();
+      expect(real?.dia_corte).toBe(20);
+    });
+
+    it("conciliar_movimientos sobre la cuenta ajena lanza CUENTA_NO_ENCONTRADA", async () => {
+      const { error } = await a.cliente.rpc("conciliar_movimientos", {
+        p_cuenta_id: datosB.banco,
+        p_ids: [datosB.movimiento],
+        p_conciliado: true,
+      });
+      expect(error?.message).toBe("CUENTA_NO_ENCONTRADA");
+      const { data } = await admin
+        .from("movimientos")
+        .select("conciliado_origen")
+        .eq("id", datosB.movimiento)
+        .single();
+      expect(data?.conciliado_origen).toBe(false);
+    });
+
+    it("conciliar_movimientos en la cuenta propia con un movimiento ajeno lanza MOVIMIENTO_NO_ENCONTRADO", async () => {
+      const { error } = await a.cliente.rpc("conciliar_movimientos", {
+        p_cuenta_id: datosA.banco,
+        p_ids: [datosA.movimiento, datosB.movimiento],
+        p_conciliado: true,
+      });
+      expect(error?.message).toBe("MOVIMIENTO_NO_ENCONTRADO");
+      const { data } = await admin
+        .from("movimientos")
+        .select("id, conciliado_origen")
+        .in("id", [datosA.movimiento, datosB.movimiento]);
+      expect(data!.every((m) => m.conciliado_origen === false)).toBe(true);
+    });
+
+    it("registrar_ajuste sobre la cuenta ajena lanza CUENTA_NO_ENCONTRADA y no crea nada", async () => {
+      const id = randomUUID();
+      const { error } = await a.cliente.rpc("registrar_ajuste", {
+        p_id: id,
+        p_cuenta_id: datosB.banco,
+        p_monto: cifrador().cifrar(1000n, contexto.movimiento(a.id, id)),
+        p_sube: true,
+        p_fecha: hoy,
+        p_conciliar: true,
+      });
+      expect(error?.message).toBe("CUENTA_NO_ENCONTRADA");
+      const { data } = await admin.from("movimientos").select("id").eq("id", id);
+      expect(data).toEqual([]);
+    });
+
+    it("el historial de tarjetas no se escribe ni se borra a mano", async () => {
+      const { error } = await a.cliente.from("tarjetas_cambios").insert({
+        cuenta_id: datosA.tarjeta,
+        usuario_id: a.id,
+        campo: "dia_corte",
+      });
+      expect(error?.code).toBe("42501");
+
+      const { data } = await a.cliente
+        .from("tarjetas_cambios")
+        .delete()
+        .eq("cuenta_id", datosA.tarjeta)
         .select("id");
       expect(data).toEqual([]);
     });

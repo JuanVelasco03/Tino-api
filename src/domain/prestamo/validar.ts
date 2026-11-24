@@ -6,7 +6,7 @@
  */
 import { calcularSaldo, type EfectoMovimiento } from "../cuenta/saldo.js";
 import { esFechaValida } from "../fecha/mes.js";
-import type { TipoMovimiento } from "../movimiento/movimiento.js";
+import type { TipoMovimientoGuardado } from "../movimiento/movimiento.js";
 import { esTipoPrestamo, type Prestamo, type TipoPrestamo } from "./prestamo.js";
 import { tasaACpb } from "./tasa.js";
 
@@ -129,7 +129,7 @@ export function validarCambio(c: CambioPrestamo): ErrorPrestamo | null {
 // ---------------------------------------------------------------------------
 
 export type CuentasDeMovimiento = {
-  tipo: TipoMovimiento;
+  tipo: TipoMovimientoGuardado;
   cuentaOrigenId: string | null;
   cuentaDestinoId: string | null;
 };

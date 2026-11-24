@@ -6,7 +6,7 @@
 import type { EfectoMovimiento } from "../cuenta/saldo.js";
 import { esFechaValida } from "../fecha/mes.js";
 import { parsearCantidad } from "./cantidad.js";
-import type { TipoMovimiento } from "../movimiento/movimiento.js";
+import type { TipoMovimientoGuardado } from "../movimiento/movimiento.js";
 import type { Cobertura } from "../precio/precio.js";
 import {
   TIPO_INVERSION,
@@ -331,7 +331,7 @@ export function validarTrasCambio(
 export type CuentaDeMovimiento = { tipo: string; moneda: Moneda };
 
 export type MovimientoConMonedas = {
-  tipo: TipoMovimiento;
+  tipo: TipoMovimientoGuardado;
   montoDestino: bigint | null;
   cuentaOrigenId: string | null;
   cuentaDestinoId: string | null;
