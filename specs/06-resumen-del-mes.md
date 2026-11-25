@@ -63,22 +63,24 @@ Cubre el inventario `specs/necesidades/resumen.md` (ver tabla de cobertura).
 Todas las fechas son días calendario `"YYYY-MM-DD"` en la zona del perfil. `creado_en` y `cambiado_en` se pasan a día local con `fechaLocal`.
 
 - **Mes mostrado** `M`. **Mes anterior** `M−1`. Rango de `M`: `rangoDelMes(M)`.
-- **Ingresos / gastos de un mes:** suma de `monto` de los movimientos `ingreso` / `gasto` con fecha en el mes. Las transferencias no cuentan (RN-05, RN-07).
+- **Cierre de un mes visto desde hoy** (`fechaCierreDelMes`): su último día si ya terminó; en el mes actual, hoy. Es el corte de todo el resumen de ese mes: cifras, cantidad de movimientos y puente. Lo fechado después de hoy (un movimiento programado, una TRM ya publicada para mañana) todavía no pasó y no entra. *(Enmienda 2026-11-24.)*
+- **Ingresos / gastos de un mes:** suma de `monto` de los movimientos `ingreso` / `gasto` con fecha entre el primer día del mes y su cierre. Las transferencias no cuentan (RN-05, RN-07).
 - **Resultado:** ingresos − gastos.
 - **Gasto por categoría:** un gasto con `categoria_id` suma a su categoría. Un gasto dividido suma cada parte a la categoría de la parte. Un gasto sin categoría ni partes suma a «sin categoría».
-- **Cantidad de movimientos:** todos los del mes, de cualquier tipo, también los de cuentas archivadas. Coincide con `GET /movimientos?mes=`.
+- **Cantidad de movimientos:** todos los del mes hasta su cierre, de cualquier tipo, también los de cuentas archivadas. Coincide con `GET /movimientos?mes=` salvo los movimientos con fecha posterior a hoy.
 - **Saldo inicial vigente de una cuenta en la fecha F:**
   - Se toma el último cambio con día local ≤ F y se usa su `valor_nuevo`.
   - Si no hay ninguno, se toma el primer cambio posterior y se usa su `valor_anterior`.
   - Si no hay cambios, vale `saldo_inicial`.
-- **Patrimonio en la fecha F:** se suma cada cuenta con día local de `creado_en` ≤ F, archivadas incluidas. Cada cuenta aporta su saldo inicial vigente en F más el efecto de sus movimientos con fecha ≤ F (`calcularSaldo`). Los activos suman y los pasivos restan (`naturalezaDe`).
-- **Inicio:** el día local de creación de la cuenta más antigua, archivadas incluidas. Es `null` sin cuentas.
+- **Inicio efectivo de una cuenta** (`conInicioEfectivo`, enmienda 2026-11-24): el menor entre el día local de `creado_en` y la fecha de su primer movimiento (como origen o destino) o, en una inversión, de su primera operación. Es la premisa de RN-01 en `GET /cuentas`: el saldo inicial es el saldo antes de todos los movimientos, también de los fechados antes del alta. El saldo de hoy no cambia.
+- **Patrimonio en la fecha F:** se suma cada cuenta con inicio efectivo ≤ F, archivadas incluidas. Cada cuenta aporta su saldo inicial vigente en F más el efecto de sus movimientos con fecha ≤ F (`calcularSaldo`). Los activos suman y los pasivos restan (`naturalezaDe`).
+- **Inicio:** el inicio efectivo de la cuenta más antigua, archivadas incluidas. Es `null` sin cuentas.
 - **Serie:** el patrimonio en el último día de cada uno de los 11 meses anteriores al mes actual, más el de hoy. Se omiten los puntos con fecha anterior al inicio. Va en orden ascendente y el último punto es hoy.
 - **Cambio en el mes:**
   - `patrimonioAnterior` = patrimonio en el último día de `M−1`.
-  - `patrimonioCierre` = patrimonio en el último día de `M`.
+  - `patrimonioCierre` = patrimonio en el cierre de `M`: el último día si `M` ya terminó; hoy en el mes actual, y entonces es igual a `patrimonio.hoy`.
   - `resultado` = resultado de `M`.
-  - `otrosCambios` = cierre − anterior − resultado. Recoge los saldos iniciales de cuentas creadas en el mes, las ediciones de saldo inicial del mes y los movimientos fechados antes de crear su cuenta.
+  - `otrosCambios` = cierre − anterior − resultado. Recoge los saldos iniciales de cuentas que empiezan en el mes y las ediciones de saldo inicial del mes. Con el inicio efectivo, un movimiento fechado antes del alta ya no cae aquí: la cuenta existe desde ese movimiento.
 - **Variación:** actual − anterior.
 - **Porcentaje en décimas:** `round(1000 × parte / total)`, con redondeo half-up lejos de cero, calculado con `bigint`. 274 = 27,4 %. Es `null` si el total es cero.
 - **Variación porcentual:** `round(1000 × (actual − anterior) / |anterior|)`. Es `null` si el anterior es cero.
@@ -128,7 +130,7 @@ type ResumenDto = {
   };
   cambioDelMes: {
     fechaAnterior: string;      // último día de M−1
-    fechaCierre: string;        // último día de M
+    fechaCierre: string;        // cierre de M: último día, u hoy en el mes actual
     patrimonioAnterior: string;
     resultado: string;
     otrosCambios: string;
@@ -333,9 +335,9 @@ Con ese escenario:
 - **Sí:** se enmienda REGLAS §7 para que entre el resumen del mes. **No:** construir otros informes.
 - **Sí:** una sola ruta, `GET /resumen?mes=`. **No:** separar la serie: serían dos llamadas al abrir y la recalcularía igual.
 - **Sí:** el patrimonio a una fecha se reconstruye en cada consulta. **No:** fotos de cierre de mes (RN-01).
-- **Sí:** cada cuenta cuenta desde su creación (día local de `creado_en`). **No:** desde siempre, ni desde su primer movimiento.
+- **Sí:** cada cuenta cuenta desde su inicio efectivo: el menor entre su alta y su primer movimiento u operación (enmienda 2026-11-24). Quien deja Notion da de alta la cuenta hoy y carga su historia hacia atrás; con el día de alta, el patrimonio pasado salía en 0, la serie traía un punto, `otrosCambios` absorbía toda la historia y la revaluación de las inversiones absorbía los fondeos pasados. Sin migración: se deriva de datos que ya se leen. **No:** desde el día de alta (la decisión original). **No:** desde siempre. **No:** una fecha explícita del saldo inicial (requiere modelo y UI; se puede discutir en otro spec). Contra aceptado: si el usuario puso como saldo inicial el de hoy y luego cargó gastos pasados, el patrimonio pasado sale bajo o negativo; ese error ya está en `GET /cuentas`.
 - **Sí:** el saldo inicial vigente en cada fecha se toma de `cuentas_cambios`, y los cierres pasados no cambian al editar. **No:** retroactivo.
-- **Sí:** `otrosCambios` como residuo (cierre − anterior − resultado). El puente siempre cuadra y absorbe casos raros, como un movimiento fechado antes de crear su cuenta. **No:** sumar por separado altas y ediciones, que se descuadra en esos casos.
+- **Sí:** `otrosCambios` como residuo (cierre − anterior − resultado). El puente siempre cuadra y absorbe casos raros. **No:** sumar por separado altas y ediciones, que se descuadra en esos casos.
 - **Sí:** la API envía variaciones y porcentajes. **No:** que cada cliente los calcule.
 - **Sí:** porcentajes como enteros en décimas, con redondeo half-up y `bigint`. **No:** `number` con decimales. **No:** enteros de 0 a 100, que pierden el decimal del diseño.
 - **Sí:** la variación porcentual divide por el valor absoluto del anterior, para que un resultado que empeora salga negativo. Es `null` con anterior cero.
@@ -344,7 +346,7 @@ Con ese escenario:
 - **Sí:** `tieneMovimientos`, `cuentasActivas` e `inicio` en el DTO. **No:** que el cliente llame también a `GET /cuentas`.
 - **Sí:** sin migración; lecturas de tablas existentes. **No:** una función SQL de lectura.
 - **Sí:** el punto de hoy y los cierres cuentan movimientos con fecha ≤ F. Si hay movimientos con fecha futura, `patrimonio.hoy` difiere del `patrimonioNeto` de `GET /cuentas`, que los incluye (SPEC 04). Se documenta en `docs/api/resumen.md`.
-- **Sí:** `cambioDelMes.patrimonioCierre` es al último día de `M`. En el mes actual coincide con hoy, salvo movimientos con fecha futura dentro del mes. El cliente lo rotula «a hoy».
+- **Sí:** el resumen del mes actual se corta hoy (`fechaCierreDelMes`). `cambioDelMes.patrimonioCierre` es igual a `patrimonio.hoy`, y `resultado`, las cifras y las categorías solo cuentan movimientos con fecha ≤ hoy, para que el puente use un solo criterio. **No:** cerrar el mes actual en su último día, que metía en el cierre los movimientos programados y valoraba las inversiones con la TRM ya publicada de un día futuro, de modo que «Patrimonio a hoy» y `patrimonio.hoy` diferían (enmienda 2026-11-24). **No:** cifras al mes completo con el puente a hoy, porque el `resultado` y el cierre tendrían cortes distintos y `otrosCambios` absorbería la diferencia. Consecuencia aceptada: con movimientos futuros, `cantidadMovimientos` del mes actual es menor que la lista de `GET /movimientos?mes=`.
 - **Sí:** `categorias` desempata por `anterior` y luego por `posicion`, para que el orden sea estable.
 - **Sí:** una cuenta eliminada (nunca tuvo movimientos) desaparece también de los cierres pasados. Eliminar equivale a que no existió.
 

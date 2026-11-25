@@ -9,6 +9,7 @@ import { resumirMes } from "../domain/resumen/mes.js";
 import { TIPO_INVERSION } from "../domain/inversion/inversion.js";
 import {
   cambioDelMes,
+  conInicioEfectivo,
   fechasConTrm,
   fechasDePrecios,
   inicio,
@@ -69,7 +70,8 @@ export class ResumenService {
     ]);
 
     const idsInversion = lectura.cuentas.filter((c) => c.tipo === TIPO_INVERSION).map((c) => c.id);
-    const base: DatosPatrimonio = {
+    // Cada cuenta cuenta desde su inicio efectivo (SPEC 06): antes de pedir la TRM.
+    const base: DatosPatrimonio = conInicioEfectivo({
       cuentas: lectura.cuentas.map((c) => ({
         id: c.id,
         tipo: c.tipo,
@@ -80,7 +82,7 @@ export class ResumenService {
       cambios: lectura.cambios.map((c) => ({ ...c, fecha: fechaLocal(c.cambiadoEn, zona) })),
       movimientos: lectura.movimientos,
       inversiones: await this.inversionesConPrecios(usuario, idsInversion, fechaHoy, mesMostrado),
-    };
+    });
     const fechasTrm = fechasConTrm(base, fechaHoy, mesMostrado);
     const trm =
       fechasTrm.length === 0 ? new Map() : await this.trm.enFechas(usuario.token, fechasTrm);
@@ -89,7 +91,13 @@ export class ResumenService {
       trm: new Map([...trm].map(([fecha, r]) => [fecha, r.trm?.valorCent ?? null])),
     };
 
-    const delMes = resumirMes(lectura.movimientos, lectura.partes, categorias, mesMostrado);
+    const delMes = resumirMes(
+      lectura.movimientos,
+      lectura.partes,
+      categorias,
+      mesMostrado,
+      fechaHoy,
+    );
     const serie = seriePatrimonio(datos, fechaHoy);
     const nombres = new Map(categorias.map((c) => [c.id, c]));
 
@@ -116,7 +124,9 @@ export class ResumenService {
         serie: aSerieDto(serie),
         variacionSerie: variacionDeSerie(serie).toString(),
       },
-      cambioDelMes: aCambioDelMesDto(cambioDelMes(datos, mesMostrado, delMes.resultado.actual)),
+      cambioDelMes: aCambioDelMesDto(
+        cambioDelMes(datos, mesMostrado, delMes.resultado.actual, fechaHoy),
+      ),
     };
   }
 

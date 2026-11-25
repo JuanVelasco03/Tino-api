@@ -8,7 +8,7 @@
  */
 import { calcularSaldo } from "../cuenta/saldo.js";
 import { naturalezaDe } from "../cuenta/naturaleza.js";
-import { mesAnterior, mesesAnteriores, ultimoDia } from "../fecha/mes.js";
+import { fechaCierreDelMes, mesAnterior, mesesAnteriores, ultimoDia } from "../fecha/mes.js";
 import { TIPO_INVERSION } from "../inversion/inversion.js";
 import { aCop, valorarInversion } from "../inversion/valoracion.js";
 import type {
@@ -188,7 +188,7 @@ export function fechasConTrm(datos: DatosPatrimonio, hoy: string, mes: string): 
     ...mesesAnteriores(hoy.slice(0, 7), MESES_SERIE).map(ultimoDia),
     hoy,
     ultimoDia(mesAnterior(mes)),
-    ultimoDia(mes),
+    fechaCierreDelMes(mes, hoy),
   ]);
   for (const cuenta of usd) {
     fechas.add(cuenta.creadaEl);
@@ -209,12 +209,46 @@ export function fechasDePrecios(hoy: string, mes: string): string[] {
     ...mesesAnteriores(hoy.slice(0, 7), MESES_SERIE).map(ultimoDia),
     hoy,
     ultimoDia(mesAnterior(mes)),
-    ultimoDia(mes),
+    fechaCierreDelMes(mes, hoy),
   ]);
   return [...fechas].filter((f) => f <= hoy).toSorted();
 }
 
-/** Día de creación de la cuenta más antigua, archivadas incluidas; `null` sin cuentas. */
+/**
+ * Inicio efectivo de cada cuenta (SPEC 06, enmienda 2026-11-24): el menor
+ * entre su día de alta y la fecha de su primer movimiento (como origen o
+ * destino) o, en una inversión, de su primera operación. Devuelve `datos` con
+ * ese día en `creadaEl`.
+ *
+ * Es la misma premisa de RN-01 en `GET /cuentas`: el saldo inicial es el saldo
+ * antes de todos los movimientos, también de los fechados antes del alta. Así
+ * el patrimonio pasado, la serie, `inicio`, los aportes y la revaluación ven
+ * la historia cargada hacia atrás. El saldo de hoy no cambia.
+ */
+export function conInicioEfectivo(datos: DatosPatrimonio): DatosPatrimonio {
+  const primero = new Map<string, string>();
+  const anotar = (id: string | null, fecha: string) => {
+    if (id === null) return;
+    const actual = primero.get(id);
+    if (actual === undefined || fecha < actual) primero.set(id, fecha);
+  };
+  for (const m of datos.movimientos) {
+    anotar(m.cuentaOrigenId, m.fecha);
+    anotar(m.cuentaDestinoId, m.fecha);
+  }
+  for (const [cuentaId, inversion] of datos.inversiones ?? []) {
+    for (const op of inversion.operaciones) anotar(cuentaId, op.fecha);
+  }
+  return {
+    ...datos,
+    cuentas: datos.cuentas.map((c) => {
+      const fecha = primero.get(c.id);
+      return fecha !== undefined && fecha < c.creadaEl ? { ...c, creadaEl: fecha } : c;
+    }),
+  };
+}
+
+/** Día de inicio (`creadaEl`) de la cuenta más antigua, archivadas incluidas; `null` sin cuentas. */
 export function inicio(cuentas: readonly CuentaPatrimonio[]): string | null {
   let primero: string | null = null;
   for (const c of cuentas) {
@@ -238,15 +272,23 @@ export function seriePatrimonio(datos: DatosPatrimonio, hoy: string): PuntoPatri
 }
 
 /**
- * Puente del patrimonio del mes `mes`: del cierre de `M−1` al cierre de `M`.
- * `revaluacion` es la de las inversiones (SPEC 10). `otrosCambios` es el
+ * Puente del patrimonio del mes `mes`: del cierre de `M−1` al cierre de `M`
+ * (`fechaCierreDelMes`: en el mes actual, hoy, y entonces `patrimonioCierre`
+ * es el patrimonio de hoy). `resultado` debe medirse con el mismo corte
+ * (`resumirMes` con el mismo `hoy`). `revaluacion` es la de las inversiones (SPEC 10). `otrosCambios` es el
  * residuo (cierre − anterior − resultado − revaluacion), así que el puente
- * siempre cuadra: recoge saldos iniciales de cuentas nuevas, ediciones de
- * saldo inicial y movimientos fechados antes de crear su cuenta.
+ * siempre cuadra: recoge saldos iniciales de cuentas nuevas y ediciones de
+ * saldo inicial. Con `conInicioEfectivo`, los movimientos fechados antes del
+ * alta ya no caen aquí.
  */
-export function cambioDelMes(datos: DatosPatrimonio, mes: string, resultado: bigint): CambioDelMes {
+export function cambioDelMes(
+  datos: DatosPatrimonio,
+  mes: string,
+  resultado: bigint,
+  hoy: string,
+): CambioDelMes {
   const fechaAnterior = ultimoDia(mesAnterior(mes));
-  const fechaCierre = ultimoDia(mes);
+  const fechaCierre = fechaCierreDelMes(mes, hoy);
   const patrimonioAnterior = patrimonioEn(datos, fechaAnterior);
   const patrimonioCierre = patrimonioEn(datos, fechaCierre);
   const revaluacion = revaluacionEntre(datos, fechaAnterior, fechaCierre);

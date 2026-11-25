@@ -4,6 +4,7 @@ import { UNA, activo, op, precio } from "../inversion/fixtures.test-utils.js";
 import {
   aportesEn,
   cambioDelMes,
+  conInicioEfectivo,
   fechasConTrm,
   fechasDePrecios,
   flujosEntre,
@@ -87,8 +88,8 @@ function escenarioEtoro(trm: bigint | null = TRM): DatosPatrimonio {
 describe("patrimonioEn con inversiones", () => {
   it("la inversión USD aporta su valor de mercado en COP con la TRM de la fecha", () => {
     // Bancolombia 1.760.000 + eToro 212.240 centavos × 41,20 = 8.744.288.
-    expect(patrimonioEn(escenarioEtoro(), "2026-11-30")).toBe(10_504_288n);
-    expect(valorInversionesEn(escenarioEtoro(), "2026-11-30")).toBe(8_744_288n);
+    expect(patrimonioEn(escenarioEtoro(), H)).toBe(10_504_288n);
+    expect(valorInversionesEn(escenarioEtoro(), H)).toBe(8_744_288n);
   });
 
   it("antes de crearse la inversión no aporta", () => {
@@ -96,28 +97,28 @@ describe("patrimonioEn con inversiones", () => {
   });
 
   it("una inversión USD sin TRM aporta 0", () => {
-    expect(patrimonioEn(escenarioEtoro(null), "2026-11-30")).toBe(1_760_000n);
+    expect(patrimonioEn(escenarioEtoro(null), H)).toBe(1_760_000n);
   });
 
   it("usa la TRM de cada fecha", () => {
     const datos = escenarioEtoro();
     const trm = new Map(datos.trm);
-    trm.set("2026-11-30", 400_000n);
+    trm.set(H, 400_000n);
     // 212.240 × 4.000,00 / 100 = 8.489.600.
-    expect(patrimonioEn({ ...datos, trm }, "2026-11-30")).toBe(1_760_000n + 8_489_600n);
+    expect(patrimonioEn({ ...datos, trm }, H)).toBe(1_760_000n + 8_489_600n);
   });
 });
 
 describe("revaluación", () => {
   it("criterio de SPEC 10: (60,00 realizados + 62,40 no realizados) × 4.120 = 504.288", () => {
     const datos = escenarioEtoro();
-    expect(flujosEntre(datos, "2026-10-31", "2026-11-30")).toBe(8_240_000n);
-    expect(aportesEn(datos, "2026-11-30")).toBe(0n);
-    expect(revaluacionEntre(datos, "2026-10-31", "2026-11-30")).toBe(504_288n);
+    expect(flujosEntre(datos, "2026-10-31", H)).toBe(8_240_000n);
+    expect(aportesEn(datos, H)).toBe(0n);
+    expect(revaluacionEntre(datos, "2026-10-31", H)).toBe(504_288n);
   });
 
   it("el puente cuadra y otrosCambios excluye la revaluación", () => {
-    const puente = cambioDelMes(escenarioEtoro(), "2026-11", 0n);
+    const puente = cambioDelMes(escenarioEtoro(), "2026-11", 0n, H);
     expect(puente).toMatchObject({
       patrimonioAnterior: 10_000_000n,
       resultado: 0n,
@@ -130,6 +131,16 @@ describe("revaluación", () => {
     ).toBe(puente.patrimonioCierre);
   });
 
+  it("en el mes actual, una TRM ya publicada para un día futuro no mueve el cierre", () => {
+    const datos = escenarioEtoro();
+    const trm = new Map(datos.trm);
+    trm.set("2026-11-30", 400_000n);
+    const puente = cambioDelMes({ ...datos, trm }, "2026-11", 0n, H);
+    expect(puente.fechaCierre).toBe(H);
+    expect(puente.patrimonioCierre).toBe(patrimonioEn({ ...datos, trm }, H));
+    expect(puente.revaluacion).toBe(504_288n);
+  });
+
   it("un retiro hacia COP es un flujo negativo por el lado COP y no cambia la revaluación", () => {
     const datos = escenarioEtoro();
     const conRetiro = {
@@ -139,8 +150,8 @@ describe("revaluación", () => {
         transferencia("etoro", "bancolombia", 100_000n, 4_120_000n),
       ],
     };
-    expect(flujosEntre(conRetiro, "2026-10-31", "2026-11-30")).toBe(8_240_000n - 4_120_000n);
-    expect(revaluacionEntre(conRetiro, "2026-10-31", "2026-11-30")).toBe(504_288n);
+    expect(flujosEntre(conRetiro, "2026-10-31", H)).toBe(8_240_000n - 4_120_000n);
+    expect(revaluacionEntre(conRetiro, "2026-10-31", H)).toBe(504_288n);
   });
 
   it("las transferencias entre dos inversiones son internas", () => {
@@ -151,8 +162,8 @@ describe("revaluación", () => {
       cuentas: [...datos.cuentas, otra],
       movimientos: [...datos.movimientos, transferencia("etoro", "ibkr", 1_000n, null)],
     };
-    expect(flujosEntre(conInterna, "2026-10-31", "2026-11-30")).toBe(8_240_000n);
-    expect(revaluacionEntre(conInterna, "2026-10-31", "2026-11-30")).toBe(504_288n);
+    expect(flujosEntre(conInterna, "2026-10-31", H)).toBe(8_240_000n);
+    expect(revaluacionEntre(conInterna, "2026-10-31", H)).toBe(504_288n);
   });
 
   it("lo que ya se tenía (saldo inicial e iniciales) son aportes, no revaluación", () => {
@@ -179,8 +190,8 @@ describe("revaluación", () => {
         ],
       ]),
     };
-    expect(aportesEn(datos, "2026-11-30")).toBe(1_250_000n);
-    expect(cambioDelMes(datos, "2026-11", 0n)).toMatchObject({
+    expect(aportesEn(datos, H)).toBe(1_250_000n);
+    expect(cambioDelMes(datos, "2026-11", 0n, H)).toMatchObject({
       revaluacion: 0n,
       otrosCambios: 1_250_000n,
       patrimonioCierre: 1_250_000n,
@@ -211,11 +222,42 @@ describe("revaluación", () => {
         ],
       ]),
     };
-    expect(cambioDelMes(datos, "2026-11", 0n)).toMatchObject({
+    expect(cambioDelMes(datos, "2026-11", 0n, H)).toMatchObject({
       patrimonioAnterior: 250_000n,
       revaluacion: 10_000n,
       otrosCambios: 0n,
       patrimonioCierre: 260_000n,
+    });
+  });
+});
+
+describe("conInicioEfectivo con inversiones", () => {
+  it("toma la primera operación, y la revaluación de un mes ya no absorbe fondeos pasados", () => {
+    // Alta en H, pero el fondeo fue en septiembre y la posición inicial en agosto.
+    const voo = { ...activo("VOO"), cuentaId: "etoro" };
+    const crudos: DatosPatrimonio = {
+      cuentas: [bancolombia, { ...etoro, creadaEl: H }],
+      cambios: [],
+      movimientos: [transferencia("bancolombia", "etoro", 8_240_000n, 200_000n, "2026-09-10")],
+      inversiones: new Map([
+        [
+          "etoro",
+          {
+            activos: [voo],
+            operaciones: [op("VOO", "inicial", UNA, 50_000n, "2026-08-01")],
+            precios: [precio("VOO", 50_000n, "2026-08-01", "2026-08-01T10:00:00Z")],
+          },
+        ],
+      ]),
+    };
+    const sinTrm = conInicioEfectivo(crudos);
+    expect(sinTrm.cuentas.find((c) => c.id === "etoro")?.creadaEl).toBe("2026-08-01");
+    const datos = { ...sinTrm, trm: trmConstante(sinTrm, TRM) };
+    expect(fechasConTrm(sinTrm, H, "2026-11")).toContain("2026-08-01");
+    // Sin cambio de precio ni de dólar, noviembre no revalúa nada.
+    expect(cambioDelMes(datos, "2026-11", 0n, H)).toMatchObject({
+      revaluacion: 0n,
+      otrosCambios: 0n,
     });
   });
 });
@@ -245,6 +287,12 @@ describe("fechasConTrm", () => {
     expect(fechas).toContain("2026-09-30");
     expect(fechas).toContain("2025-12-31");
     expect(fechas).toEqual([...new Set(fechas)].toSorted());
+  });
+
+  it("en el mes actual no pide la TRM de una fecha futura: el cierre es hoy", () => {
+    const fechas = fechasConTrm({ cuentas: [etoro], cambios: [], movimientos: [] }, H, "2026-11");
+    expect(fechas.at(-1)).toBe(H);
+    expect(fechas).not.toContain("2026-11-30");
   });
 });
 

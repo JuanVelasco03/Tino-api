@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   diasDe,
+  fechaCierreDelMes,
   diasEntre,
   esFechaValida,
   esMesValido,
@@ -97,6 +98,17 @@ describe("ultimoDia", () => {
   it("febrero de 2026 termina el 28 y el bisiesto el 29", () => {
     expect(ultimoDia("2026-02")).toBe("2026-02-28");
     expect(ultimoDia("2028-02")).toBe("2028-02-29");
+  });
+});
+
+describe("fechaCierreDelMes", () => {
+  it("un mes cerrado cierra en su último día", () => {
+    expect(fechaCierreDelMes("2026-10", "2026-11-24")).toBe("2026-10-31");
+  });
+
+  it("el mes actual cierra hoy", () => {
+    expect(fechaCierreDelMes("2026-11", "2026-11-24")).toBe("2026-11-24");
+    expect(fechaCierreDelMes("2026-11", "2026-11-30")).toBe("2026-11-30");
   });
 });
 

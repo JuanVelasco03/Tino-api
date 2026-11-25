@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   cambioDelMes,
+  conInicioEfectivo,
   inicio,
   patrimonioEn,
   saldoInicialVigente,
@@ -75,6 +76,9 @@ const movimientosEscenario: MovimientoResumen[] = [
   mov({ tipo: "gasto", monto: 90_000n, fecha: "2026-11-01", cuentaOrigenId: "tarjeta" }),
   mov({ tipo: "gasto", monto: 10_000n, fecha: "2026-11-01", cuentaOrigenId: "nequi" }),
 ];
+
+/** Un día posterior a noviembre: para estas pruebas, M ya cerró. */
+const DESPUES = "2026-12-05";
 
 const escenario: DatosPatrimonio = {
   cuentas: [nequi, tarjeta],
@@ -242,7 +246,7 @@ describe("seriePatrimonio", () => {
 
 describe("cambioDelMes", () => {
   it("el puente cuadra: anterior + resultado + otros = cierre", () => {
-    const puente = cambioDelMes(escenario, "2026-11", -300_000n);
+    const puente = cambioDelMes(escenario, "2026-11", -300_000n, DESPUES);
     expect(puente).toEqual({
       fechaAnterior: "2026-10-31",
       fechaCierre: "2026-11-30",
@@ -258,7 +262,7 @@ describe("cambioDelMes", () => {
   });
 
   it("con cuentas creadas en el mes, su saldo inicial queda en otrosCambios", () => {
-    const puente = cambioDelMes(escenario, "2026-10", 1_580_000n);
+    const puente = cambioDelMes(escenario, "2026-10", 1_580_000n, DESPUES);
     expect(puente).toMatchObject({
       fechaAnterior: "2026-09-30",
       patrimonioAnterior: 0n,
@@ -273,7 +277,7 @@ describe("cambioDelMes", () => {
       cuentas: [{ ...nequi, saldoInicial: 1_100_000n }, tarjeta],
       cambios: [cambio("nequi", 1_000_000n, 1_100_000n, "2026-11-21")],
     };
-    expect(cambioDelMes(datos, "2026-11", -300_000n)).toMatchObject({
+    expect(cambioDelMes(datos, "2026-11", -300_000n, DESPUES)).toMatchObject({
       patrimonioAnterior: 2_580_000n,
       otrosCambios: 100_000n,
       patrimonioCierre: 2_380_000n,
@@ -288,10 +292,109 @@ describe("cambioDelMes", () => {
         mov({ tipo: "ingreso", monto: 500n, fecha: "2026-10-20", cuentaDestinoId: "nequi" }),
       ],
     };
-    const puente = cambioDelMes(datos, "2026-11", 0n);
+    const puente = cambioDelMes(datos, "2026-11", 0n, DESPUES);
     expect(puente.patrimonioAnterior).toBe(0n);
     expect(puente.patrimonioCierre).toBe(500n);
     expect(puente.otrosCambios).toBe(500n);
+  });
+});
+
+describe("cambioDelMes: corte a hoy (SPEC 06)", () => {
+  const HOY = "2026-11-24";
+  const programado = mov({
+    tipo: "gasto",
+    monto: 70_000n,
+    fecha: "2026-11-28",
+    cuentaOrigenId: "nequi",
+  });
+  const conProgramado: DatosPatrimonio = {
+    ...escenario,
+    movimientos: [...movimientosEscenario, programado],
+  };
+
+  it("en el mes actual cierra hoy: un movimiento posterior a hoy no entra", () => {
+    const puente = cambioDelMes(conProgramado, "2026-11", -300_000n, HOY);
+    expect(puente.fechaCierre).toBe(HOY);
+    expect(puente.patrimonioCierre).toBe(patrimonioEn(conProgramado, HOY));
+    expect(puente.patrimonioCierre).toBe(2_280_000n);
+    expect(puente.otrosCambios).toBe(0n);
+  });
+
+  it("un mes cerrado sigue cerrando en su último día", () => {
+    const puente = cambioDelMes(conProgramado, "2026-10", 1_580_000n, HOY);
+    expect(puente.fechaCierre).toBe("2026-10-31");
+    expect(puente.patrimonioCierre).toBe(patrimonioEn(conProgramado, "2026-10-31"));
+    expect(puente.patrimonioCierre).toBe(2_580_000n);
+  });
+
+  it("ya pasada la fecha, el programado entra en el cierre del mes", () => {
+    const puente = cambioDelMes(conProgramado, "2026-11", -370_000n, DESPUES);
+    expect(puente.fechaCierre).toBe("2026-11-30");
+    expect(puente.patrimonioCierre).toBe(2_210_000n);
+    expect(puente.otrosCambios).toBe(0n);
+  });
+});
+
+describe("conInicioEfectivo (SPEC 06, enmienda)", () => {
+  // Nequi se da de alta el 24 nov, pero el usuario carga su historia desde mayo.
+  const nequiNueva: CuentaPatrimonio = { ...nequi, saldoInicial: 300_000n, creadaEl: "2026-11-24" };
+  const historia = [
+    mov({ tipo: "ingreso", monto: 2_000_000n, fecha: "2026-05-31", cuentaDestinoId: "nequi" }),
+    mov({ tipo: "gasto", monto: 500_000n, fecha: "2026-10-10", cuentaOrigenId: "nequi" }),
+    mov({ tipo: "gasto", monto: 100_000n, fecha: "2026-11-05", cuentaOrigenId: "nequi" }),
+  ];
+  const crudos: DatosPatrimonio = { cuentas: [nequiNueva], cambios: [], movimientos: historia };
+  const datos = conInicioEfectivo(crudos);
+
+  it("adelanta el inicio de la cuenta a su primer movimiento", () => {
+    expect(datos.cuentas[0]?.creadaEl).toBe("2026-05-31");
+    expect(inicio(datos.cuentas)).toBe("2026-05-31");
+  });
+
+  it("no cambia el inicio si el primer movimiento es posterior al alta", () => {
+    expect(conInicioEfectivo(escenario).cuentas).toEqual(escenario.cuentas);
+  });
+
+  it("toma también el lado destino de una transferencia", () => {
+    const t = mov({
+      tipo: "transferencia",
+      monto: 1n,
+      fecha: "2026-09-01",
+      cuentaOrigenId: "nequi",
+      cuentaDestinoId: "tarjeta",
+    });
+    const r = conInicioEfectivo({ cuentas: [tarjeta], cambios: [], movimientos: [t] });
+    expect(r.cuentas[0]?.creadaEl).toBe("2026-09-01");
+  });
+
+  it("el saldo de hoy no cambia; el pasado ve la historia", () => {
+    const hoy = "2026-11-24";
+    expect(patrimonioEn(datos, hoy)).toBe(patrimonioEn(crudos, hoy));
+    expect(patrimonioEn(datos, hoy)).toBe(1_700_000n);
+    expect(patrimonioEn(crudos, "2026-10-31")).toBe(0n);
+    expect(patrimonioEn(datos, "2026-10-31")).toBe(1_800_000n);
+    // Antes del inicio efectivo la cuenta todavía no existe.
+    expect(patrimonioEn(datos, "2026-05-30")).toBe(0n);
+  });
+
+  it("la serie trae los cierres desde el primer movimiento", () => {
+    const serie = seriePatrimonio(datos, "2026-11-24");
+    expect(serie[0]).toEqual({ fecha: "2026-05-31", patrimonio: 2_300_000n });
+    expect(serie).toHaveLength(7);
+    expect(serie.at(-1)).toEqual({ fecha: "2026-11-24", patrimonio: 1_700_000n });
+  });
+
+  it("el puente del mes cuadra sin otrosCambios", () => {
+    expect(cambioDelMes(datos, "2026-11", -100_000n, "2026-11-24")).toMatchObject({
+      patrimonioAnterior: 1_800_000n,
+      otrosCambios: 0n,
+      patrimonioCierre: 1_700_000n,
+    });
+    expect(cambioDelMes(datos, "2026-10", -500_000n, "2026-11-24")).toMatchObject({
+      patrimonioAnterior: 2_300_000n,
+      otrosCambios: 0n,
+      patrimonioCierre: 1_800_000n,
+    });
   });
 });
 

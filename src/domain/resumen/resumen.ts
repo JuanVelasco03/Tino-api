@@ -53,7 +53,7 @@ export type ParteResumen = { movimientoId: string; categoriaId: string; monto: b
 
 /**
  * Cuenta para el patrimonio, archivadas, préstamos (SPEC 08) e inversiones
- * (SPEC 10) incluidos. `creadaEl`: día local de `creado_en`. Montos en la
+ * (SPEC 10) incluidos. `creadaEl`: inicio de la cuenta (ver el campo). Montos en la
  * moneda de la cuenta.
  */
 export type CuentaPatrimonio = {
@@ -61,6 +61,11 @@ export type CuentaPatrimonio = {
   tipo: TipoCuentaGuardada;
   moneda: Moneda;
   saldoInicial: bigint;
+  /**
+   * Día desde el que la cuenta entra en el patrimonio. Llega como el día local
+   * del alta; `conInicioEfectivo` lo adelanta a su primer movimiento u
+   * operación si es anterior (SPEC 06).
+   */
   creadaEl: string;
 };
 

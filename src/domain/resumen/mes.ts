@@ -4,7 +4,7 @@
  * parte a su categoría; uno sin categoría ni partes, a «sin categoría».
  */
 import type { Categoria } from "../categorizacion/categoria.js";
-import { mesAnterior, rangoDelMes } from "../fecha/mes.js";
+import { fechaCierreDelMes, mesAnterior, rangoDelMes } from "../fecha/mes.js";
 import { porcentajeEnDecimas, variacionPorcentual } from "./porcentaje.js";
 import type {
   CategoriaDelMes,
@@ -38,10 +38,13 @@ function sumar(mapa: Map<string, bigint>, clave: string, monto: bigint): void {
 
 function cifrasDe(
   mes: string,
+  hoy: string,
   movimientos: readonly MovimientoResumen[],
   partesPorMovimiento: ReadonlyMap<string, readonly ParteResumen[]>,
 ): CifrasMes {
-  const { desde, hasta } = rangoDelMes(mes);
+  const { desde } = rangoDelMes(mes);
+  // Mismo corte que el puente del patrimonio: lo fechado después de hoy aún no pasó.
+  const hasta = fechaCierreDelMes(mes, hoy);
   const cifras: CifrasMes = {
     cantidad: 0,
     ingresos: 0n,
@@ -83,6 +86,9 @@ function descendente(x: bigint, y: bigint): number {
  * cualquier rango: solo cuentan los de cada mes. `partes`, al menos las de los
  * gastos divididos de ambos meses.
  *
+ * Cuenta hasta `fechaCierreDelMes(mes, hoy)`: en el mes actual, los
+ * movimientos con fecha posterior a hoy no entran (SPEC 06).
+ *
  * `categorias` del resultado: las que tienen gasto en `M` o en `M−1`, por
  * monto desc, luego anterior desc y luego `posicion`. Los porcentajes son
  * parte de los gastos de `M`.
@@ -92,6 +98,7 @@ export function resumirMes(
   partes: readonly ParteResumen[],
   categorias: readonly Categoria[],
   mes: string,
+  hoy: string,
 ): ResumenMes {
   const partesPorMovimiento = new Map<string, ParteResumen[]>();
   for (const p of partes) {
@@ -100,8 +107,8 @@ export function resumirMes(
     partesPorMovimiento.set(p.movimientoId, lista);
   }
 
-  const actual = cifrasDe(mes, movimientos, partesPorMovimiento);
-  const anterior = cifrasDe(mesAnterior(mes), movimientos, partesPorMovimiento);
+  const actual = cifrasDe(mes, hoy, movimientos, partesPorMovimiento);
+  const anterior = cifrasDe(mesAnterior(mes), hoy, movimientos, partesPorMovimiento);
   const posiciones = new Map(categorias.map((c) => [c.id, c.posicion]));
   const posicionDe = (id: string) => posiciones.get(id) ?? Number.MAX_SAFE_INTEGER;
 

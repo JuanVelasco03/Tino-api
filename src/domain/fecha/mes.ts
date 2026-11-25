@@ -116,3 +116,14 @@ export function mesesAnteriores(mes: string, cantidad: number): string[] {
   }
   return meses;
 }
+
+/**
+ * Día de cierre del mes `mes` visto desde `hoy`: su último día si ya terminó;
+ * en el mes actual, hoy. Lo que aún no pasa (movimientos fechados después de
+ * hoy, valoración con una TRM o un precio de un día futuro) no entra en el
+ * resumen del mes (SPEC 06).
+ */
+export function fechaCierreDelMes(mes: string, hoy: string): string {
+  const ultimo = ultimoDia(mes);
+  return ultimo < hoy ? ultimo : hoy;
+}

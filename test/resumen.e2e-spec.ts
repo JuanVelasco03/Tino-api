@@ -259,7 +259,7 @@ describe("/resumen", () => {
       const r = await resumen(u, M);
       expect(r.cambioDelMes).toEqual({
         fechaAnterior: ultimoDia(M1),
-        fechaCierre: ultimoDia(M),
+        fechaCierre: hoy,
         patrimonioAnterior: "2580000",
         resultado: "-300000",
         revaluacion: "0",

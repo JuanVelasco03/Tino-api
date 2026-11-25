@@ -69,10 +69,10 @@ type ResumenDto = {
   desde: string;                     // primer día del mes, "YYYY-MM-DD"
   hasta: string;                     // último día del mes
   fechaHoy: string;                  // hoy en la zona del usuario
-  inicio: string | null;             // día de creación de la cuenta más antigua; null sin cuentas
+  inicio: string | null;             // inicio efectivo de la cuenta más antigua (ver Patrimonio); null sin cuentas
   tieneMovimientos: boolean;         // false → estado de día uno (todo el historial, no solo el mes)
   cuentasActivas: number;            // no archivadas, sin préstamos
-  cantidadMovimientos: number;       // del mes, de cualquier tipo salvo ajustes (SPEC 14)
+  cantidadMovimientos: number;       // del mes hasta su cierre, de cualquier tipo salvo ajustes (SPEC 14)
   ingresos: ComparacionDto;
   gastos: ComparacionDto;
   resultado: ComparacionDto;         // ingresos − gastos
@@ -91,7 +91,7 @@ type ResumenDto = {
   };
   cambioDelMes: {
     fechaAnterior: string;           // último día de M−1
-    fechaCierre: string;             // último día de M
+    fechaCierre: string;             // cierre de M: su último día, u hoy en el mes actual
     patrimonioAnterior: string;
     resultado: string;               // = resultado.actual
     revaluacion: string;             // de las inversiones (SPEC 10); puede ser negativa
@@ -141,7 +141,7 @@ type ResumenDto = {
   },
   "cambioDelMes": {
     "fechaAnterior": "2026-10-31",
-    "fechaCierre": "2026-11-30",
+    "fechaCierre": "2026-11-21",
     "patrimonioAnterior": "2580000",
     "resultado": "-300000",
     "revaluacion": "0",
@@ -156,10 +156,20 @@ type ResumenDto = {
 | 400 | `MES_INVALIDO` | `mes` | No es `YYYY-MM` o el mes no existe (`2026-13`). |
 | 400 | `MES_FUTURO` | `mes` | El mes es posterior al actual en la zona del usuario. «Ese mes todavía no llega.» |
 
+### Corte del mes actual
+
+Todo el resumen de un mes se calcula hasta su **cierre**: el último día si el
+mes ya terminó; **hoy** en el mes actual. Lo fechado después de hoy (un
+movimiento programado, un recurrente confirmado con fecha futura) todavía no
+cuenta en ingresos, gastos, categorías, `cantidadMovimientos` ni el puente.
+Por eso, en el mes actual, `cambioDelMes.fechaCierre` es `fechaHoy` y
+`cambioDelMes.patrimonioCierre` es igual a `patrimonio.hoy`. Con movimientos
+futuros, `cantidadMovimientos` es menor que la lista de `GET /movimientos?mes=`.
+
 ### Cifras del mes
 
 - **Ingresos / gastos:** suma de los movimientos `ingreso` / `gasto` con fecha
-  en el mes, de todas las cuentas (archivadas incluidas). Las transferencias no
+  en el mes hasta su cierre, de todas las cuentas (archivadas incluidas). Las transferencias no
   cuentan (pago de tarjeta, compra de inversión, préstamo: RN-05 a RN-08).
 - **Préstamos** (SPEC 08): el desembolso y el capital de un abono son
   transferencias y no cuentan. El interés cobrado es un ingreso y el pagado un
@@ -179,8 +189,12 @@ type ResumenDto = {
 El patrimonio a una fecha se **calcula en cada consulta**, nunca se guarda
 (RN-01):
 
-- Cuenta cada cuenta creada hasta ese día (día local de su creación),
-  **archivadas incluidas**. Una cuenta eliminada (nunca tuvo movimientos) no
+- Cuenta cada cuenta desde su **inicio efectivo**: el menor entre el día local
+  de su alta y la fecha de su primer movimiento (o, en una inversión, de su
+  primera operación), **archivadas incluidas**. Así, una cuenta dada de alta hoy
+  con movimientos cargados hacia atrás aparece en los cierres pasados, la serie
+  y `inicio` desde ese primer movimiento. El saldo de hoy no cambia: el saldo
+  inicial es el saldo antes de todos los movimientos, como en `GET /cuentas`. Una cuenta eliminada (nunca tuvo movimientos) no
   cuenta en ninguna fecha.
 - Cada cuenta aporta el saldo inicial **vigente en esa fecha** más el efecto de
   sus movimientos con fecha ≤ ese día. Editar el saldo inicial hoy no cambia
@@ -207,17 +221,17 @@ también los de fecha futura. Con movimientos futuros, las dos cifras difieren.
 `patrimonioAnterior + resultado + revaluacion + otrosCambios = patrimonioCierre`, siempre.
 
 - `patrimonioAnterior`: patrimonio al último día del mes anterior.
-- `patrimonioCierre`: patrimonio al último día del mes consultado. En el mes
-  actual coincide con hoy, salvo movimientos con fecha futura dentro del mes.
-  El cliente lo rotula «a hoy».
+- `patrimonioCierre`: patrimonio en `fechaCierre`, el último día del mes
+  consultado. En el mes actual, `fechaCierre` es hoy y `patrimonioCierre` es
+  igual a `patrimonio.hoy`; el cliente lo rotula «a hoy».
 - `revaluacion` (SPEC 10): lo que cambió el valor de las inversiones por
   precio, por el dólar y por la ganancia realizada en ventas. Es la variación
   de su valor en COP menos lo que se les llevó o sacó en el mes
   (transferencias, por su lado COP) y menos lo que ya se tenía al crearlas
   (efectivo inicial y operaciones `inicial`). Sin inversiones, `"0"`.
-- `otrosCambios` es el residuo, sin la revaluación. Recoge los saldos iniciales de cuentas creadas
-  en el mes, las ediciones de saldo inicial del mes y los movimientos fechados
-  antes de crear su cuenta. Los saldos iniciales no son movimientos: nunca
+- `otrosCambios` es el residuo, sin la revaluación. Recoge los saldos
+  iniciales de cuentas que empiezan en el mes y las ediciones de saldo inicial
+  del mes. Los saldos iniciales no son movimientos: nunca
   entran en ingresos ni gastos.
 
 ### Estado de día uno y navegación

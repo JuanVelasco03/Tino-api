@@ -4,6 +4,7 @@ import { resumirMes } from "./mes.js";
 import type { MovimientoResumen, ParteResumen } from "./resumen.js";
 
 const NEQUI = "nequi";
+const HOY = "2026-11-24";
 const TARJETA = "tarjeta";
 
 const categorias: Categoria[] = [
@@ -61,7 +62,7 @@ function escenario(): { movimientos: MovimientoResumen[]; partes: ParteResumen[]
 describe("resumirMes", () => {
   it("las cifras del escenario coinciden con los criterios de aceptación", () => {
     const { movimientos, partes } = escenario();
-    const r = resumirMes(movimientos, partes, categorias, "2026-11");
+    const r = resumirMes(movimientos, partes, categorias, "2026-11", HOY);
 
     expect(r.cantidadMovimientos).toBe(3);
     expect(r.ingresos).toEqual({
@@ -89,7 +90,7 @@ describe("resumirMes", () => {
       mov({ tipo: "transferencia", monto: 500_000n, fecha: "2026-11-03" }),
       mov({ tipo: "gasto", monto: 1_000n, fecha: "2026-11-03" }),
     ];
-    const r = resumirMes(movimientos, [], categorias, "2026-11");
+    const r = resumirMes(movimientos, [], categorias, "2026-11", HOY);
     expect(r.ingresos.actual).toBe(0n);
     expect(r.gastos.actual).toBe(1_000n);
     expect(r.cantidadMovimientos).toBe(2);
@@ -101,15 +102,32 @@ describe("resumirMes", () => {
       mov({ tipo: "ajuste", monto: 3_500n, fecha: "2026-11-03", cuentaDestinoId: null }),
       mov({ tipo: "ajuste", monto: 1_000n, fecha: "2026-11-04", cuentaOrigenId: null }),
     ];
-    const r = resumirMes(movimientos, [], categorias, "2026-11");
+    const r = resumirMes(movimientos, [], categorias, "2026-11", HOY);
     expect(r.ingresos.actual).toBe(0n);
     expect(r.gastos.actual).toBe(10_000n);
     expect(r.cantidadMovimientos).toBe(1);
   });
 
+  it("en el mes actual, lo fechado después de hoy no entra (mismo corte que el puente)", () => {
+    const movimientos = [
+      mov({ tipo: "gasto", monto: 10_000n, fecha: HOY, categoriaId: "comida" }),
+      mov({ tipo: "gasto", monto: 70_000n, fecha: "2026-11-28", categoriaId: "comida" }),
+      mov({ tipo: "ingreso", monto: 500_000n, fecha: "2026-11-30", cuentaDestinoId: NEQUI }),
+    ];
+    const r = resumirMes(movimientos, [], categorias, "2026-11", HOY);
+    expect(r.gastos.actual).toBe(10_000n);
+    expect(r.ingresos.actual).toBe(0n);
+    expect(r.cantidadMovimientos).toBe(1);
+
+    const cerrado = resumirMes(movimientos, [], categorias, "2026-11", "2026-12-01");
+    expect(cerrado.gastos.actual).toBe(80_000n);
+    expect(cerrado.ingresos.actual).toBe(500_000n);
+    expect(cerrado.cantidadMovimientos).toBe(3);
+  });
+
   it("el gasto dividido se reparte entre sus partes", () => {
     const { movimientos, partes } = escenario();
-    const r = resumirMes(movimientos, partes, categorias, "2026-11");
+    const r = resumirMes(movimientos, partes, categorias, "2026-11", HOY);
     expect(r.categorias.find((c) => c.categoriaId === "comida")).toMatchObject({
       monto: 260_000n,
       anterior: 300_000n,
@@ -124,7 +142,7 @@ describe("resumirMes", () => {
 
   it("una categoría con gasto solo en M−1 aparece con 0", () => {
     const { movimientos, partes } = escenario();
-    const r = resumirMes(movimientos, partes, categorias, "2026-11");
+    const r = resumirMes(movimientos, partes, categorias, "2026-11", HOY);
     expect(r.categorias.find((c) => c.categoriaId === "transporte")).toEqual({
       categoriaId: "transporte",
       monto: 0n,
@@ -136,7 +154,7 @@ describe("resumirMes", () => {
 
   it("ordena por monto desc, anterior desc y posición; «sin categoría» va aparte", () => {
     const { movimientos, partes } = escenario();
-    const r = resumirMes(movimientos, partes, categorias, "2026-11");
+    const r = resumirMes(movimientos, partes, categorias, "2026-11", HOY);
     expect(r.categorias.map((c) => c.categoriaId)).toEqual(["comida", "mercado", "transporte"]);
   });
 
@@ -147,13 +165,13 @@ describe("resumirMes", () => {
       mov({ tipo: "gasto", monto: 5_000n, fecha: "2026-11-02", categoriaId: "transporte" }),
       mov({ tipo: "gasto", monto: 1_000n, fecha: "2026-10-02", categoriaId: "transporte" }),
     ];
-    const r = resumirMes(movimientos, [], categorias, "2026-11");
+    const r = resumirMes(movimientos, [], categorias, "2026-11", HOY);
     expect(r.categorias.map((c) => c.categoriaId)).toEqual(["transporte", "comida", "mercado"]);
   });
 
   it("«sin categoría» lleva su cantidad del mes", () => {
     const { movimientos, partes } = escenario();
-    const r = resumirMes(movimientos, partes, categorias, "2026-11");
+    const r = resumirMes(movimientos, partes, categorias, "2026-11", HOY);
     expect(r.sinCategoria).toEqual({
       monto: 10_000n,
       anterior: 100_000n,
@@ -164,7 +182,7 @@ describe("resumirMes", () => {
   });
 
   it("un mes sin movimientos da ceros y porcentajes nulos", () => {
-    const r = resumirMes([], [], categorias, "2026-11");
+    const r = resumirMes([], [], categorias, "2026-11", HOY);
     expect(r.cantidadMovimientos).toBe(0);
     expect(r.ingresos).toEqual({
       actual: 0n,
@@ -187,7 +205,7 @@ describe("resumirMes", () => {
       mov({ tipo: "gasto", monto: 7_000n, fecha: "2026-09-30", categoriaId: "comida" }),
       mov({ tipo: "gasto", monto: 7_000n, fecha: "2026-12-01", categoriaId: "comida" }),
     ];
-    const r = resumirMes(movimientos, [], categorias, "2026-11");
+    const r = resumirMes(movimientos, [], categorias, "2026-11", HOY);
     expect(r.gastos.actual).toBe(0n);
     expect(r.gastos.anterior).toBe(0n);
     expect(r.categorias).toEqual([]);
